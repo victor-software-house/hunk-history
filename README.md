@@ -12,8 +12,8 @@ Requires Hunk 0.19.0 or newer (extension API 6) and `git` on `PATH`.
 
 ## What it adds
 
-- **The reviewed commit in the review title**: `twin-supply-chain 4/5 59e8a94a
-  fix(frontend): read consignment documents as attachments`. The position also
+- **The reviewed commit in the review title**: `hunk-commit-log 3/11 e0ced7b
+  feat(session): load a clicked commit into the live review`. The position also
   reaches `hunk session list`, so a window says which commit it holds.
 - **A commit list on the left**, oldest at the top, the reviewed commit marked
   with `▸`. Click any row to load that commit into the same window.
