@@ -1,0 +1,19 @@
+{
+  "name": "hunk-commit-log",
+  "version": "0.1.0",
+  "description": "Review a commit series in Hunk: the commit list beside the diff, the message above it.",
+  "type": "module",
+  "license": "MIT",
+  "hunk": {
+    "apiVersion": 6
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "hunkdiff": "^0.19.0",
+    "typescript": "^5.7.2"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "node --test"
+  }
+}

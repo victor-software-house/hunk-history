@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "target": "es2022",
+    "lib": [
+      "es2023"
+    ],
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "types": [
+      "node"
+    ],
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "allowImportingTsExtensions": true
+  },
+  "include": [
+    "index.ts",
+    "test"
+  ]
+}
