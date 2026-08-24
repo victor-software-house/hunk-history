@@ -53,8 +53,40 @@ export function subscribeSeries(listener: () => void): () => void {
 
 /** The pane showing the message at its configured height. */
 export const COLLAPSED_MESSAGE_PANE = "message";
-/** The pane showing as much of the message as the terminal allows. */
-export const EXPANDED_MESSAGE_PANE = "messageExpanded";
+/**
+ * The heights an expanded message pane can take, smallest first.
+ *
+ * A ladder rather than a number, because a pane's height reaches Hunk once, at
+ * registration, and no API resizes it afterwards: fitting the message means
+ * registering several panes and opening the one that fits. The rungs are coarse
+ * on purpose. Being two rows too tall is invisible; being thirty rows too tall
+ * costs the diff the screen.
+ */
+export const EXPANDED_RUNGS = [8, 12, 18, 26, 36, 50] as const;
+
+/** The pane id for one rung of the ladder. */
+export function expandedPane(rows: number): string {
+  return `messageExpanded${rows}`;
+}
+
+/**
+ * The rows a message needs: the two heading rows, then the body after a blank.
+ *
+ * Counted from the body's own lines rather than from what the pane will paint,
+ * because the pane's width is not known until it renders. A commit body is
+ * already hard-wrapped by whoever wrote it, so on any terminal wide enough for
+ * a diff this is exact; where a line does wrap, the pane is one rung short and
+ * says so with its own count.
+ */
+export function messageRowsNeeded(message: CommitMessage): number {
+  const body = message.body === "" ? 0 : message.body.split("\n").length + 1;
+  return 2 + body;
+}
+
+/** The smallest rung that holds `needed` rows, or the tallest when none does. */
+export function rungFor(needed: number): number {
+  return EXPANDED_RUNGS.find((rows) => rows >= needed) ?? EXPANDED_RUNGS[EXPANDED_RUNGS.length - 1]!;
+}
 
 /**
  * Which message pane to open, and which to close, for a given state.
@@ -64,10 +96,14 @@ export const EXPANDED_MESSAGE_PANE = "messageExpanded";
  * a swap between two panes of the same component at two declared heights, and
  * this is the mapping both the expand key and the show-or-hide key read.
  */
-export function messagePanes(expanded: boolean): { open: string; close: string } {
-  return expanded
-    ? { open: EXPANDED_MESSAGE_PANE, close: COLLAPSED_MESSAGE_PANE }
-    : { open: COLLAPSED_MESSAGE_PANE, close: EXPANDED_MESSAGE_PANE };
+export function messagePanes(message: CommitMessage | null): {
+  collapsed: string;
+  expanded: string;
+} {
+  return {
+    collapsed: COLLAPSED_MESSAGE_PANE,
+    expanded: expandedPane(message === null ? EXPANDED_RUNGS[0] : rungFor(messageRowsNeeded(message))),
+  };
 }
 
 /**

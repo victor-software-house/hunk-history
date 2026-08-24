@@ -3,8 +3,11 @@ import { beforeEach, test } from "node:test";
 import {
   COLLAPSED_MESSAGE_PANE,
   EMPTY_SERIES,
-  EXPANDED_MESSAGE_PANE,
+  EXPANDED_RUNGS,
+  expandedPane,
   messagePanes,
+  messageRowsNeeded,
+  rungFor,
   neighbour,
   publishSeries,
   seriesSnapshot,
@@ -149,17 +152,44 @@ test("the same message twice is not a change", () => {
   unsubscribe();
 });
 
-test("expanding swaps which message pane is open", () => {
-  assert.deepEqual(messagePanes(false), {
-    open: COLLAPSED_MESSAGE_PANE,
-    close: EXPANDED_MESSAGE_PANE,
+function message(bodyLines: number) {
+  return {
+    author: "Ada",
+    date: "2026-08-01",
+    body: bodyLines === 0 ? "" : Array.from({ length: bodyLines }, (_, i) => `line ${i}`).join("\n"),
+  };
+}
+
+test("a message needs its heading rows plus its body", () => {
+  assert.equal(messageRowsNeeded(message(0)), 2, "subject and author, no blank line");
+  assert.equal(messageRowsNeeded(message(1)), 4, "heading, blank, one line");
+  assert.equal(messageRowsNeeded(message(30)), 33);
+});
+
+test("the pane that fits is the smallest rung that holds the message", () => {
+  assert.equal(rungFor(1), 8);
+  assert.equal(rungFor(8), 8);
+  assert.equal(rungFor(9), 12);
+  assert.equal(rungFor(33), 36);
+});
+
+test("a message taller than every rung takes the tallest", () => {
+  assert.equal(rungFor(400), EXPANDED_RUNGS[EXPANDED_RUNGS.length - 1]);
+});
+
+test("expanding picks the pane sized for this message", () => {
+  assert.deepEqual(messagePanes(message(30)), {
+    collapsed: COLLAPSED_MESSAGE_PANE,
+    expanded: expandedPane(36),
   });
-  assert.deepEqual(messagePanes(true), {
-    open: EXPANDED_MESSAGE_PANE,
-    close: COLLAPSED_MESSAGE_PANE,
+  assert.deepEqual(messagePanes(message(1)), {
+    collapsed: COLLAPSED_MESSAGE_PANE,
+    expanded: expandedPane(8),
   });
 });
 
-test("the two message panes are distinct panes", () => {
-  assert.notEqual(COLLAPSED_MESSAGE_PANE, EXPANDED_MESSAGE_PANE);
+test("every rung is a distinct pane, and none is the collapsed one", () => {
+  const ids = EXPANDED_RUNGS.map(expandedPane);
+  assert.equal(new Set(ids).size, ids.length);
+  assert.ok(!ids.includes(COLLAPSED_MESSAGE_PANE));
 });

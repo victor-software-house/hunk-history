@@ -1,4 +1,4 @@
-import type { HunkExtensionAPI } from "hunkdiff/extension";
+import type { ExtensionPaneControls, HunkExtensionAPI } from "hunkdiff/extension";
 import { CommitLogPane, MessagePane } from "./pane.tsx";
 import {
   configuredLimit,
@@ -14,7 +14,8 @@ import { pendingCommit, requestCommit } from "./session.ts";
 import {
   COLLAPSED_MESSAGE_PANE,
   EMPTY_SERIES,
-  EXPANDED_MESSAGE_PANE,
+  EXPANDED_RUNGS,
+  expandedPane,
   messagePanes,
   neighbour,
   publishSeries,
@@ -85,16 +86,20 @@ export default function registerCommitLog(hunk: HunkExtensionAPI): void {
     component: MessagePane,
   });
 
-  // Hunk clamps a pane to the space left after the review keeps its five rows,
-  // so asking for more rows than any terminal has means "as much as fits".
-  hunk.registerPane({
-    id: EXPANDED_MESSAGE_PANE,
-    title: "Commit message, expanded",
-    placement: "top",
-    height: { preferred: 200, min: 3 },
-    available: hasMessage,
-    component: MessagePane,
-  });
+  // One pane per rung of the ladder: the expand key opens whichever one holds
+  // this commit's message. Hunk still clamps a rung to the rows left after the
+  // review keeps its five, so a message longer than the screen fills it and
+  // reports the remainder.
+  for (const rows of EXPANDED_RUNGS) {
+    hunk.registerPane({
+      id: expandedPane(rows),
+      title: `Commit message, ${rows} rows`,
+      placement: "top",
+      height: { preferred: rows, min: 3 },
+      available: hasMessage,
+      component: MessagePane,
+    });
+  }
 
   hunk.registerCommand({ id: "toggle", title: "Toggle the commit list", key: "h" }, (ctx) => {
     ctx.panes.toggle("commits");
@@ -102,23 +107,44 @@ export default function registerCommitLog(hunk: HunkExtensionAPI): void {
 
   let expanded = false;
 
+  /** Show the message at one size, closing every pane that held the other. */
+  const showMessageAt = (ctx: { panes: ExtensionPaneControls }, next: boolean): void => {
+    const panes = messagePanes(seriesSnapshot().message);
+    for (const rows of EXPANDED_RUNGS) {
+      if (!next || expandedPane(rows) !== panes.expanded) {
+        ctx.panes.close(expandedPane(rows));
+      }
+    }
+    if (next) {
+      ctx.panes.close(panes.collapsed);
+      ctx.panes.open(panes.expanded);
+    } else {
+      ctx.panes.open(panes.collapsed);
+    }
+    expanded = next;
+  };
+
   hunk.registerCommand({ id: "message", title: "Toggle the commit message", key: "i" }, (ctx) => {
-    ctx.panes.toggle(messagePanes(expanded).open);
+    const panes = messagePanes(seriesSnapshot().message);
+    ctx.panes.toggle(expanded ? panes.expanded : panes.collapsed);
   });
 
   hunk.registerCommand(
     { id: "expand", title: "Expand or collapse the commit message", key: "I" },
     (ctx) => {
-      if (!hasMessage()) {
-        return;
+      if (hasMessage()) {
+        showMessageAt(ctx, !expanded);
       }
-
-      expanded = !expanded;
-      const panes = messagePanes(expanded);
-      ctx.panes.close(panes.close);
-      ctx.panes.open(panes.open);
     },
   );
+
+  // A step to another commit brings a message of another length, so the rung
+  // that fit the last one is the wrong pane to leave open.
+  hunk.on("changeset_loaded", (_event, ctx) => {
+    if (expanded && hasMessage()) {
+      showMessageAt(ctx, true);
+    }
+  });
 
   // `]` and `[` are already next and previous hunk, and a built-in keeps a
   // chord an extension asks for, so stepping between commits gets n and p.

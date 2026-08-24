@@ -95,7 +95,7 @@ leading dash reads as an option.
 | `p` | `hunk-commit-log.previous`   | Previous commit in the series     |
 | `h` | `hunk-commit-log.toggle`     | Show or hide the commit list      |
 | `i` | `hunk-commit-log.message`    | Show or hide the commit message   |
-| `I` | `hunk-commit-log.expand`     | Expand the message, or collapse it |
+| `I` | `hunk-commit-log.expand`     | Fit the pane to the message, or collapse it |
 
 Remap them by command id in the `[keybindings]` table of your user config, which
 is the only place Hunk reads keybindings from:
@@ -135,14 +135,14 @@ stopped on rather than every commit you passed through.
   review keeps its width and the list disappears until the window is wider. It
   comes back on its own; the pane stays open, it is only unrendered.
 - The message pane has no scrolling of its own, because a pane never receives
-  key events. `I` expands it to as many rows as the terminal allows, which shows
-  the whole message for any body that fits; beyond that the pane shows its
-  opening and reports the rest as a count. Dragging the lower edge and
-  `messageRows` set the collapsed height.
-- Expanding swaps one pane for another, because a pane's height is fixed when it
-  is registered and no API resizes it afterwards. The expanded pane takes every
-  row Hunk will give it, so a three-line message looks lost in it; `I` again puts
-  it back.
+  key events. `I` grows it to fit the message instead. Dragging the lower edge
+  and `messageRows` set the collapsed height.
+- Expanding is a swap between panes of a few fixed heights (8, 12, 18, 26, 36
+  and 50 rows), because a pane's height is fixed when it is registered and no
+  API resizes it afterwards. `I` opens the smallest one the message fits in, so
+  the fit is exact to within a few rows rather than to the row. A message past
+  fifty rows, or past what the terminal has once the diff keeps five, still
+  shows its opening and reports the rest as a count.
 - Only Git, and it cannot tell that it is not. Hunk's Jujutsu and Sapling
   backends title a revision review `<repo> show <rev>` exactly as the Git one
   does, so in a colocated repository this extension would match the title and
