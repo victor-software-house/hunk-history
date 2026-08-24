@@ -2,6 +2,7 @@ import type { HunkExtensionAPI } from "hunkdiff/extension";
 import { CommitLogPane, MessagePane } from "./pane.tsx";
 import {
   configuredLimit,
+  configuredMessageRows,
   configuredRange,
   gitRunner,
   readMessage,
@@ -65,7 +66,10 @@ export default function registerCommitLog(hunk: HunkExtensionAPI): void {
     id: "message",
     title: "Commit message",
     placement: "top",
-    height: { preferred: 8, min: 3, max: 16 },
+    // No `max`: Hunk caps a drag at the pane's own maximum, so declaring one
+    // stops a reviewer growing the pane to fit a long body. Hunk still keeps
+    // five rows for the diff, which is the only ceiling that belongs here.
+    height: { preferred: configuredMessageRows(hunk.config), min: 3 },
     defaultOpen: true,
     available: () => seriesSnapshot().message !== null,
     component: MessagePane,

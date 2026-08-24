@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   configuredLimit,
+  configuredMessageRows,
   configuredRange,
   DEFAULT_LIMIT,
+  DEFAULT_MESSAGE_ROWS,
   readMessage,
   resolveSeries,
   seriesTitle,
@@ -254,4 +256,18 @@ test("a message git cannot produce is no message", () => {
   const { git } = fakeRepo();
 
   assert.equal(readMessage(git, "v9.9.9"), null);
+});
+
+test("the message pane's starting height comes from configuration", () => {
+  assert.equal(configuredMessageRows({ messageRows: 24 }), 24);
+  assert.equal(configuredMessageRows({ messageRows: 12.7 }), 12);
+  assert.equal(configuredMessageRows({}), DEFAULT_MESSAGE_ROWS);
+  assert.equal(configuredMessageRows(undefined), DEFAULT_MESSAGE_ROWS);
+  assert.equal(configuredMessageRows({ messageRows: "tall" }), DEFAULT_MESSAGE_ROWS);
+});
+
+test("a starting height stays inside what a pane can hold", () => {
+  assert.equal(configuredMessageRows({ messageRows: 0 }), 3);
+  assert.equal(configuredMessageRows({ messageRows: -20 }), 3);
+  assert.equal(configuredMessageRows({ messageRows: 5_000 }), 60);
 });

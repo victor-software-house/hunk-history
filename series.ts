@@ -22,6 +22,10 @@ export type GitRunner = (args: readonly string[]) => string | null;
 /** Commits with no configured range: the N ending at the reviewed commit. */
 export const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 500;
+/** Rows the message pane starts with, and the range a reviewer may ask for. */
+export const DEFAULT_MESSAGE_ROWS = 8;
+const MIN_MESSAGE_ROWS = 3;
+const MAX_MESSAGE_ROWS = 60;
 const GIT_TIMEOUT_MS = 2_000;
 
 /**
@@ -115,6 +119,23 @@ export function configuredRange(config: unknown): string | null {
 
   const range = value.trim();
   return range === "" || range.startsWith("-") ? null : range;
+}
+
+/**
+ * The rows the message pane starts with.
+ *
+ * Hunk keeps a dragged pane size in session state and forgets it on quit, so a
+ * reviewer whose commits carry long bodies would drag the pane taller at every
+ * launch. The default stays small: a one-line commit should not cost the diff
+ * eight rows.
+ */
+export function configuredMessageRows(config: unknown): number {
+  const value = (config as { messageRows?: unknown } | undefined)?.messageRows;
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return DEFAULT_MESSAGE_ROWS;
+  }
+
+  return Math.min(Math.max(Math.trunc(value), MIN_MESSAGE_ROWS), MAX_MESSAGE_ROWS);
 }
 
 /** A commit count from configuration, clamped to something a sidebar can hold. */

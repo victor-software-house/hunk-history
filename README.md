@@ -57,6 +57,7 @@ the config table below; a different name silently renames all of them.
 [extension.hunk-commit-log]
 range = "main..HEAD"   # the series to review; default: recent history
 limit = 20             # commits to gather when no range is set; max 500
+messageRows = 8        # rows the message pane starts with; 3 to 60
 ```
 
 **`range`** is any revision range `git rev-list` accepts. With a range set, the
@@ -75,6 +76,12 @@ through `hunk.log`, which Hunk 0.19.0 collects but does not appear to display
 anywhere, so in practice the fallback is unobservable: if the position looks
 like plain recent history rather than your branch, the range is the thing to
 check.
+
+**`messageRows`** is the height the message pane opens at. Drag its lower edge
+to resize it in a session; Hunk keeps that size in session state and forgets it
+on quit, so this is where a taller default belongs if your commits carry long
+bodies. The default is deliberately small: a one-line commit should not cost the
+diff eight rows.
 
 A range that begins with `-` is ignored. A repository's own `.hunk/config.toml`
 may set this table, and the value reaches a `git rev-list` argument list where a
@@ -126,8 +133,11 @@ stopped on rather than every commit you passed through.
   the diff below its own minimum width. On a terminal too narrow for both, the
   review keeps its width and the list disappears until the window is wider. It
   comes back on its own; the pane stays open, it is only unrendered.
-- The commit message does not scroll. A pane cannot take keyboard focus, so a
-  long body shows its opening and reports the rest as a count.
+- The message pane has no scrolling of its own, because a pane never receives
+  key events. A body taller than the pane shows its opening and reports the rest
+  as a count; drag the pane's lower edge to grow it, or start it taller with
+  `messageRows`. Hunk keeps five rows for the diff and nothing else limits how
+  tall it goes.
 - Only Git, and it cannot tell that it is not. Hunk's Jujutsu and Sapling
   backends title a revision review `<repo> show <rev>` exactly as the Git one
   does, so in a colocated repository this extension would match the title and
