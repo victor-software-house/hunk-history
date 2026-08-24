@@ -2,6 +2,7 @@ import { useEffect, useRef, useSyncExternalStore, type ReactNode } from "react";
 import type { ScrollBoxRenderable } from "@opentui/core";
 import type { ExtensionPaneProps } from "hunkdiff/extension";
 import { commitRow, seriesHeading } from "./row.ts";
+import { requestCommit } from "./session.ts";
 import { seriesSnapshot, subscribeSeries } from "./store.ts";
 
 /** Row ids are what `scrollChildIntoView` addresses, so they must be stable. */
@@ -17,7 +18,7 @@ function rowId(index: number): string {
  * stepping keys, so the rows count the same way. Reading down the pane is
  * reading the branch forwards.
  */
-export function CommitLogPane({ width, height, theme }: ExtensionPaneProps): ReactNode {
+export function CommitLogPane({ actions, width, height, theme }: ExtensionPaneProps): ReactNode {
   const { commits, position } = useSyncExternalStore(subscribeSeries, seriesSnapshot);
   const scroll = useRef<ScrollBoxRenderable | null>(null);
 
@@ -58,6 +59,9 @@ export function CommitLogPane({ width, height, theme }: ExtensionPaneProps): Rea
             id={rowId(index)}
             fg={index === position ? theme.text : theme.muted}
             bg={index === position ? theme.selectedHunk : theme.panel}
+            onMouseDown={
+              index === position ? undefined : () => requestCommit(commit.sha, actions.notify)
+            }
           >
             {commitRow(commit, width, index === position)}
           </text>

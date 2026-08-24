@@ -185,3 +185,38 @@ test("the header names the position, the commit, and what it does", () => {
     "demo 2/3 2222222 second",
   );
 });
+
+test("stepping inside the series on screen keeps that series", () => {
+  const { git, calls } = fakeRepo();
+  const anchor = HISTORY.slice(1, 4);
+
+  const review = resolveSeries(
+    `${REPO_NAME} show ${HISTORY[1]!.abbrev}`,
+    git,
+    DEFAULTS,
+    silent(),
+    anchor,
+  );
+
+  assert.deepEqual(review?.commits.map((commit) => commit.abbrev), ["2222222", "3333333", "4444444"]);
+  assert.equal(review?.position, 0, "the position moves, the series does not");
+  assert.ok(
+    !calls.some((call) => call[0] === "rev-list"),
+    "a held series needs no history walk at all",
+  );
+});
+
+test("opening a commit outside the series on screen rebuilds it", () => {
+  const { git } = fakeRepo();
+
+  const review = resolveSeries(
+    `${REPO_NAME} show ${HISTORY[4]!.abbrev}`,
+    git,
+    { range: null, limit: 2 },
+    silent(),
+    [HISTORY[0]!, HISTORY[1]!],
+  );
+
+  assert.deepEqual(review?.commits.map((commit) => commit.abbrev), ["4444444", "5555555"]);
+  assert.equal(review?.position, 1);
+});

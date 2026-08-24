@@ -141,6 +141,7 @@ export function resolveSeries(
   git: GitRunner,
   options: SeriesOptions,
   log: (message: string) => void,
+  anchor: readonly SeriesCommit[] = [],
 ): ReviewSeries | null {
   const repoRoot = git(["rev-parse", "--show-toplevel"]);
   if (repoRoot === null) {
@@ -158,6 +159,15 @@ export function resolveSeries(
   if (head === null) {
     log(`cannot read a commit for ref "${ref}"`);
     return null;
+  }
+
+  // A step within the series on screen keeps that series. Rebuilding it from
+  // the commit just loaded would re-anchor it on every step, so walking back
+  // through a branch would report 20/20 at each stop and the rows above the
+  // reviewed commit would change under the reviewer.
+  const held = anchor.findIndex((commit) => commit.sha === head.sha);
+  if (held >= 0) {
+    return { repoName, commits: [...anchor], position: held };
   }
 
   const commits = buildSeries(git, head, options, log);

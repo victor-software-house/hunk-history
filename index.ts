@@ -20,8 +20,12 @@ export default function registerCommitLog(hunk: HunkExtensionAPI): void {
     // A throwing transform costs the reviewer the whole changeset, so every
     // failure here degrades to the review Hunk built without us.
     try {
-      const review = resolveSeries(changeset.title, gitRunner(ctx.cwd), options, (message) =>
-        hunk.log(message),
+      const review = resolveSeries(
+        changeset.title,
+        gitRunner(ctx.cwd),
+        options,
+        (message) => hunk.log(message),
+        seriesSnapshot().commits,
       );
       if (review === null) {
         publishSeries(EMPTY_SERIES);
