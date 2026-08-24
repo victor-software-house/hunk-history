@@ -10,6 +10,11 @@ author said about it. This extension puts the commit back into the review.
 
 Requires Hunk 0.19.0 or newer (extension API 6) and `git` on `PATH`.
 
+A review in progress, reading this extension's own history: the commit series in
+the left pane, the message above the diff, and `n` stepping between commits.
+
+https://github.com/user-attachments/assets/8bc8ff58-d154-4f9f-8a2c-10256a051cc0
+
 ## What it adds
 
 - **The reviewed commit in the review title**: `hunk-commit-log 3/11 e0ced7b
