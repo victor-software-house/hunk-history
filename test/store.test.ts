@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { beforeEach, test } from "node:test";
 import {
+  COLLAPSED_MESSAGE_PANE,
   EMPTY_SERIES,
+  EXPANDED_MESSAGE_PANE,
+  messagePanes,
   neighbour,
   publishSeries,
   seriesSnapshot,
@@ -144,4 +147,19 @@ test("the same message twice is not a change", () => {
   assert.equal(woken, 0);
   assert.equal(seriesSnapshot(), before);
   unsubscribe();
+});
+
+test("expanding swaps which message pane is open", () => {
+  assert.deepEqual(messagePanes(false), {
+    open: COLLAPSED_MESSAGE_PANE,
+    close: EXPANDED_MESSAGE_PANE,
+  });
+  assert.deepEqual(messagePanes(true), {
+    open: EXPANDED_MESSAGE_PANE,
+    close: COLLAPSED_MESSAGE_PANE,
+  });
+});
+
+test("the two message panes are distinct panes", () => {
+  assert.notEqual(COLLAPSED_MESSAGE_PANE, EXPANDED_MESSAGE_PANE);
 });

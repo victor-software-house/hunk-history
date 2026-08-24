@@ -11,7 +11,15 @@ import {
   type SeriesOptions,
 } from "./series.ts";
 import { pendingCommit, requestCommit } from "./session.ts";
-import { EMPTY_SERIES, neighbour, publishSeries, seriesSnapshot } from "./store.ts";
+import {
+  COLLAPSED_MESSAGE_PANE,
+  EMPTY_SERIES,
+  EXPANDED_MESSAGE_PANE,
+  messagePanes,
+  neighbour,
+  publishSeries,
+  seriesSnapshot,
+} from "./store.ts";
 
 export default function registerCommitLog(hunk: HunkExtensionAPI): void {
   const options: SeriesOptions = {
@@ -62,8 +70,10 @@ export default function registerCommitLog(hunk: HunkExtensionAPI): void {
     component: CommitLogPane,
   });
 
+  const hasMessage = () => seriesSnapshot().message !== null;
+
   hunk.registerPane({
-    id: "message",
+    id: COLLAPSED_MESSAGE_PANE,
     title: "Commit message",
     placement: "top",
     // No `max`: Hunk caps a drag at the pane's own maximum, so declaring one
@@ -71,7 +81,18 @@ export default function registerCommitLog(hunk: HunkExtensionAPI): void {
     // five rows for the diff, which is the only ceiling that belongs here.
     height: { preferred: configuredMessageRows(hunk.config), min: 3 },
     defaultOpen: true,
-    available: () => seriesSnapshot().message !== null,
+    available: hasMessage,
+    component: MessagePane,
+  });
+
+  // Hunk clamps a pane to the space left after the review keeps its five rows,
+  // so asking for more rows than any terminal has means "as much as fits".
+  hunk.registerPane({
+    id: EXPANDED_MESSAGE_PANE,
+    title: "Commit message, expanded",
+    placement: "top",
+    height: { preferred: 200, min: 3 },
+    available: hasMessage,
     component: MessagePane,
   });
 
@@ -79,9 +100,25 @@ export default function registerCommitLog(hunk: HunkExtensionAPI): void {
     ctx.panes.toggle("commits");
   });
 
+  let expanded = false;
+
   hunk.registerCommand({ id: "message", title: "Toggle the commit message", key: "i" }, (ctx) => {
-    ctx.panes.toggle("message");
+    ctx.panes.toggle(messagePanes(expanded).open);
   });
+
+  hunk.registerCommand(
+    { id: "expand", title: "Expand or collapse the commit message", key: "I" },
+    (ctx) => {
+      if (!hasMessage()) {
+        return;
+      }
+
+      expanded = !expanded;
+      const panes = messagePanes(expanded);
+      ctx.panes.close(panes.close);
+      ctx.panes.open(panes.open);
+    },
+  );
 
   // `]` and `[` are already next and previous hunk, and a built-in keeps a
   // chord an extension asks for, so stepping between commits gets n and p.

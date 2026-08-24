@@ -51,6 +51,25 @@ export function subscribeSeries(listener: () => void): () => void {
   };
 }
 
+/** The pane showing the message at its configured height. */
+export const COLLAPSED_MESSAGE_PANE = "message";
+/** The pane showing as much of the message as the terminal allows. */
+export const EXPANDED_MESSAGE_PANE = "messageExpanded";
+
+/**
+ * Which message pane to open, and which to close, for a given state.
+ *
+ * An extension cannot resize a pane it registered: the height reaches Hunk once,
+ * at registration, and `ctx.panes` only opens and closes. Expanding is therefore
+ * a swap between two panes of the same component at two declared heights, and
+ * this is the mapping both the expand key and the show-or-hide key read.
+ */
+export function messagePanes(expanded: boolean): { open: string; close: string } {
+  return expanded
+    ? { open: EXPANDED_MESSAGE_PANE, close: COLLAPSED_MESSAGE_PANE }
+    : { open: COLLAPSED_MESSAGE_PANE, close: EXPANDED_MESSAGE_PANE };
+}
+
 /**
  * The commit `delta` steps along the series from the reviewed one.
  *
