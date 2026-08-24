@@ -1,7 +1,8 @@
 import { useEffect, useRef, useSyncExternalStore, type ReactNode } from "react";
 import type { ScrollBoxRenderable } from "@opentui/core";
 import type { ExtensionPaneProps } from "hunkdiff/extension";
-import { commitRow, messageLines, seriesHeading } from "./row.ts";
+import { messageRows, type Tone } from "./highlight.ts";
+import { commitRow, seriesHeading } from "./row.ts";
 import { requestCommit } from "./session.ts";
 import { seriesSnapshot, subscribeSeries } from "./store.ts";
 
@@ -77,11 +78,25 @@ export function CommitLogPane({ actions, width, height, theme }: ExtensionPanePr
  * Hunk builds a revision review with `git show --format=`, so the message is
  * the one thing about the commit that the review itself never shows.
  */
+/** Tones name theme roles, so a theme switch repaints without touching this. */
+function toneColor(theme: ExtensionPaneProps["theme"], tone: Tone): string {
+  switch (tone) {
+    case "accent":
+      return theme.accent;
+    case "accentMuted":
+      return theme.accentMuted;
+    case "muted":
+      return theme.muted;
+    default:
+      return theme.text;
+  }
+}
+
 export function MessagePane({ width, height, theme }: ExtensionPaneProps): ReactNode {
   const { commits, position, message } = useSyncExternalStore(subscribeSeries, seriesSnapshot);
   const head = position === null ? undefined : commits[position];
-  const lines =
-    head === undefined || message === null ? [] : messageLines(head, message, width, height);
+  const rows =
+    head === undefined || message === null ? [] : messageRows(head, message, width, height);
 
   return (
     <box
@@ -93,13 +108,13 @@ export function MessagePane({ width, height, theme }: ExtensionPaneProps): React
         flexDirection: "column",
       }}
     >
-      {lines.map((line, index) => (
-        <text
-          key={`message-${index}`}
-          fg={index === 0 ? theme.text : theme.muted}
-          bg={theme.panel}
-        >
-          {line}
+      {rows.map((row, index) => (
+        <text key={`message-${index}`} bg={theme.panel}>
+          {row.map((segment, part) => (
+            <span key={`segment-${part}`} fg={toneColor(theme, segment.tone)} bg={theme.panel}>
+              {segment.text}
+            </span>
+          ))}
         </text>
       ))}
     </box>

@@ -1,4 +1,4 @@
-import type { CommitMessage, SeriesCommit } from "./store.ts";
+import type { SeriesCommit } from "./store.ts";
 
 /** Marks the commit the review is showing. */
 const CURRENT_MARKER = "▸";
@@ -75,38 +75,4 @@ export function wrap(text: string, width: number): string[] {
     }
     return lines;
   });
-}
-
-/**
- * The reviewed commit's message, laid out for a pane of exactly this size.
- *
- * The subject and who wrote it come first because they are what a reviewer
- * looks for; a body too long for the pane keeps its opening and says how much
- * was left, rather than ending mid-sentence with no sign that it did.
- */
-export function messageLines(
-  head: SeriesCommit,
-  message: CommitMessage,
-  width: number,
-  height: number,
-): string[] {
-  if (height <= 0 || width <= 0) {
-    return [];
-  }
-
-  const heading = [
-    clip(` ${head.abbrev} ${head.subject}`, width),
-    clip(` ${message.author}  ${message.date}`, width),
-  ];
-  const body =
-    message.body === ""
-      ? []
-      : ["", ...wrap(message.body, width - 1).map((line) => (line === "" ? "" : ` ${line}`))];
-  const lines = [...heading, ...body];
-  if (lines.length <= height) {
-    return lines;
-  }
-
-  const dropped = lines.length - (height - 1);
-  return [...lines.slice(0, height - 1), clip(` +${dropped} more lines`, width)];
 }

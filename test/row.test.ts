@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { clip, commitRow, messageLines, seriesHeading, wrap } from "../row.ts";
+import { clip, commitRow, seriesHeading, wrap } from "../row.ts";
 import type { SeriesCommit } from "../store.ts";
 
 const COMMIT: SeriesCommit = {
@@ -57,38 +57,4 @@ test("a word too long for the column is broken, never overrun", () => {
 
   assert.deepEqual(lines, ["see", "https://exam", "ple.com/a/ve", "ry/long/path", "/indeed"]);
   assert.ok(lines.every((line) => line.length <= 12));
-});
-
-test("the message leads with the commit and who wrote it", () => {
-  const lines = messageLines(
-    COMMIT,
-    { author: "Ada Lovelace", date: "2026-08-01", body: "why it had to change" },
-    40,
-    8,
-  );
-
-  assert.deepEqual(lines, [
-    " 8610b105 regenerate the open-api spec",
-    " Ada Lovelace  2026-08-01",
-    "",
-    " why it had to change",
-  ]);
-});
-
-test("a subject-only commit shows no empty body", () => {
-  const lines = messageLines(COMMIT, { author: "Ada", date: "2026-08-01", body: "" }, 40, 8);
-
-  assert.equal(lines.length, 2);
-});
-
-test("a body too tall for the pane says how much it kept back", () => {
-  const body = ["one", "two", "three", "four", "five", "six"].join("\n");
-  const lines = messageLines(COMMIT, { author: "Ada", date: "2026-08-01", body }, 40, 5);
-
-  assert.equal(lines.length, 5);
-  assert.equal(lines.at(-1), " +5 more lines");
-});
-
-test("no message fits in no rows", () => {
-  assert.deepEqual(messageLines(COMMIT, { author: "Ada", date: "d", body: "b" }, 40, 0), []);
 });

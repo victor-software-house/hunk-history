@@ -19,6 +19,10 @@ Requires Hunk 0.19.0 or newer (extension API 6) and `git` on `PATH`.
   with `▸`. Click any row to load that commit into the same window.
 - **The commit message on top**: subject, author, date, and the body wrapped to
   the pane. A body taller than the pane reports how many lines it held back.
+- **The message toned by what each part is**: the sha recedes, a Conventional
+  Commits type leads, prose reads in the foreground, identifiers in backticks
+  are picked out, and trailers and indented blocks recede. The tones name theme
+  roles rather than colours, so they follow whatever theme is active.
 - **`n` and `p`** to step to the next and previous commit in the series.
 
 Every surface is inert outside a single-commit review: during `hunk diff`, a
