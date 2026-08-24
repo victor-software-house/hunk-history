@@ -1,4 +1,4 @@
-import type { SeriesCommit } from "./store.ts";
+import type { CommitMessage, SeriesCommit } from "./store.ts";
 
 /** Marks the commit the review is showing. */
 const CURRENT_MARKER = "▸";
@@ -32,4 +32,81 @@ export function commitRow(commit: SeriesCommit, width: number, current: boolean)
 export function seriesHeading(position: number | null, total: number, width: number): string {
   const place = position === null ? `${total}` : `${position + 1}/${total}`;
   return clip(` Commits ${place}`, width);
+}
+
+/**
+ * Break text into lines that fit a column.
+ *
+ * Blank lines survive, because a commit body's paragraphs are the shape its
+ * author gave it. A word longer than the column is broken rather than allowed
+ * to overrun, which is what happens to a URL in a footer.
+ */
+export function wrap(text: string, width: number): string[] {
+  if (width <= 0) {
+    return [];
+  }
+
+  return text.split("\n").flatMap((paragraph) => {
+    const words = paragraph.split(/\s+/).filter((word) => word !== "");
+    if (words.length === 0) {
+      return [""];
+    }
+
+    const lines: string[] = [];
+    let line = "";
+    for (const word of words) {
+      if (line === "") {
+        line = word;
+      } else if (line.length + 1 + word.length <= width) {
+        line = `${line} ${word}`;
+      } else {
+        lines.push(line);
+        line = word;
+      }
+
+      while (line.length > width) {
+        lines.push(line.slice(0, width));
+        line = line.slice(width);
+      }
+    }
+
+    if (line !== "") {
+      lines.push(line);
+    }
+    return lines;
+  });
+}
+
+/**
+ * The reviewed commit's message, laid out for a pane of exactly this size.
+ *
+ * The subject and who wrote it come first because they are what a reviewer
+ * looks for; a body too long for the pane keeps its opening and says how much
+ * was left, rather than ending mid-sentence with no sign that it did.
+ */
+export function messageLines(
+  head: SeriesCommit,
+  message: CommitMessage,
+  width: number,
+  height: number,
+): string[] {
+  if (height <= 0 || width <= 0) {
+    return [];
+  }
+
+  const heading = [
+    clip(` ${head.abbrev} ${head.subject}`, width),
+    clip(` ${message.author}  ${message.date}`, width),
+  ];
+  const body =
+    message.body === ""
+      ? []
+      : ["", ...wrap(message.body, width - 1).map((line) => (line === "" ? "" : ` ${line}`))];
+  const lines = [...heading, ...body];
+  if (lines.length <= height) {
+    return lines;
+  }
+
+  const dropped = lines.length - (height - 1);
+  return [...lines.slice(0, height - 1), clip(` +${dropped} more lines`, width)];
 }

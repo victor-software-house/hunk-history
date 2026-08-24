@@ -1,7 +1,7 @@
 import { useEffect, useRef, useSyncExternalStore, type ReactNode } from "react";
 import type { ScrollBoxRenderable } from "@opentui/core";
 import type { ExtensionPaneProps } from "hunkdiff/extension";
-import { commitRow, seriesHeading } from "./row.ts";
+import { commitRow, messageLines, seriesHeading } from "./row.ts";
 import { requestCommit } from "./session.ts";
 import { seriesSnapshot, subscribeSeries } from "./store.ts";
 
@@ -67,6 +67,41 @@ export function CommitLogPane({ actions, width, height, theme }: ExtensionPanePr
           </text>
         ))}
       </scrollbox>
+    </box>
+  );
+}
+
+/**
+ * What the reviewed commit says, above the diff it produced.
+ *
+ * Hunk builds a revision review with `git show --format=`, so the message is
+ * the one thing about the commit that the review itself never shows.
+ */
+export function MessagePane({ width, height, theme }: ExtensionPaneProps): ReactNode {
+  const { commits, position, message } = useSyncExternalStore(subscribeSeries, seriesSnapshot);
+  const head = position === null ? undefined : commits[position];
+  const lines =
+    head === undefined || message === null ? [] : messageLines(head, message, width, height);
+
+  return (
+    <box
+      style={{
+        width,
+        height,
+        overflow: "hidden",
+        backgroundColor: theme.panel,
+        flexDirection: "column",
+      }}
+    >
+      {lines.map((line, index) => (
+        <text
+          key={`message-${index}`}
+          fg={index === 0 ? theme.text : theme.muted}
+          bg={theme.panel}
+        >
+          {line}
+        </text>
+      ))}
     </box>
   );
 }

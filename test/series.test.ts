@@ -4,6 +4,7 @@ import {
   configuredLimit,
   configuredRange,
   DEFAULT_LIMIT,
+  readMessage,
   resolveSeries,
   seriesTitle,
   type GitRunner,
@@ -53,9 +54,17 @@ function fakeRepo(options: { ranges?: Record<string, string[]>; repoRoot?: strin
     }
 
     if (args[0] === "log") {
-      const rev = args[4] ?? "";
-      const commit = byRev.get(rev);
-      return commit === undefined ? null : `${commit.sha}\0${commit.abbrev}\0${commit.subject}`;
+      const asking = args.includes("--date=short");
+      const commit = byRev.get((asking ? args[5] : args[4]) ?? "");
+      if (commit === undefined) {
+        return null;
+      }
+      if (!asking) {
+        return `${commit.sha}\0${commit.abbrev}\0${commit.subject}`;
+      }
+      return commit.abbrev === "3333333"
+        ? `Ada Lovelace\u00002026-08-01`
+        : `Ada Lovelace\u00002026-08-01\u0000body of ${commit.abbrev}\n`;
     }
 
     if (args[0] === "rev-list" && args[1] === "--reverse") {
@@ -219,4 +228,30 @@ test("opening a commit outside the series on screen rebuilds it", () => {
 
   assert.deepEqual(review?.commits.map((commit) => commit.abbrev), ["4444444", "5555555"]);
   assert.equal(review?.position, 1);
+});
+
+test("the reviewed commit's message is read whole", () => {
+  const { git } = fakeRepo();
+
+  assert.deepEqual(readMessage(git, HISTORY[1]!.sha), {
+    author: "Ada Lovelace",
+    date: "2026-08-01",
+    body: "body of 2222222",
+  });
+});
+
+test("a subject-only commit has an empty body, not a missing message", () => {
+  const { git } = fakeRepo();
+
+  assert.deepEqual(readMessage(git, HISTORY[2]!.sha), {
+    author: "Ada Lovelace",
+    date: "2026-08-01",
+    body: "",
+  });
+});
+
+test("a message git cannot produce is no message", () => {
+  const { git } = fakeRepo();
+
+  assert.equal(readMessage(git, "v9.9.9"), null);
 });

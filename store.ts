@@ -11,14 +11,23 @@ export interface SeriesCommit {
   subject: string;
 }
 
-/** What the pane paints: the series, and which of its commits is on screen. */
+/** Everything the reviewed commit says beyond its subject. */
+export interface CommitMessage {
+  author: string;
+  date: string;
+  /** The message body, subject line excluded; empty for a subject-only commit. */
+  body: string;
+}
+
+/** What the panes paint: the series, which commit is on screen, and what it says. */
 export interface SeriesSnapshot {
   readonly commits: readonly SeriesCommit[];
   /** Index into `commits`, or null when the review is not one commit. */
   readonly position: number | null;
+  readonly message: CommitMessage | null;
 }
 
-export const EMPTY_SERIES: SeriesSnapshot = { commits: [], position: null };
+export const EMPTY_SERIES: SeriesSnapshot = { commits: [], position: null, message: null };
 
 let snapshot: SeriesSnapshot = EMPTY_SERIES;
 const listeners = new Set<() => void>();
@@ -63,9 +72,18 @@ export function neighbour(
   return snapshot.commits[base + delta] ?? null;
 }
 
+function sameMessage(left: CommitMessage | null, right: CommitMessage | null): boolean {
+  if (left === null || right === null) {
+    return left === right;
+  }
+
+  return left.author === right.author && left.date === right.date && left.body === right.body;
+}
+
 function sameSeries(left: SeriesSnapshot, right: SeriesSnapshot): boolean {
   return (
     left.position === right.position &&
+    sameMessage(left.message, right.message) &&
     left.commits.length === right.commits.length &&
     left.commits.every((commit, index) => commit.sha === right.commits[index]?.sha)
   );

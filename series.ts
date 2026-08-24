@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { basename } from "node:path";
-import type { SeriesCommit } from "./store.ts";
+import type { CommitMessage, SeriesCommit } from "./store.ts";
 
 /** The reviewed commit, and the series it belongs to. */
 export interface ReviewSeries {
@@ -59,6 +59,34 @@ function readCommit(git: GitRunner, rev: string): SeriesCommit | null {
   }
 
   return { sha, abbrev, subject };
+}
+
+/**
+ * Read one commit's message, or null when the rev names nothing.
+ *
+ * Only ever asked for the reviewed commit: the pane shows one message, and a
+ * body per commit would cost a git call per row for text nothing renders.
+ */
+export function readMessage(git: GitRunner, rev: string): CommitMessage | null {
+  const text = git([
+    "log",
+    "-1",
+    "--no-patch",
+    "--date=short",
+    "--format=%an%x00%ad%x00%b",
+    rev,
+    "--",
+  ]);
+  if (text === null) {
+    return null;
+  }
+
+  const [author, date, body] = text.split("\0");
+  if (author === undefined || date === undefined) {
+    return null;
+  }
+
+  return { author, date, body: (body ?? "").trim() };
 }
 
 /** Read every commit a revision list names, oldest first. */

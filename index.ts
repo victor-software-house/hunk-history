@@ -1,9 +1,10 @@
 import type { HunkExtensionAPI } from "hunkdiff/extension";
-import { CommitLogPane } from "./pane.tsx";
+import { CommitLogPane, MessagePane } from "./pane.tsx";
 import {
   configuredLimit,
   configuredRange,
   gitRunner,
+  readMessage,
   resolveSeries,
   seriesTitle,
   type SeriesOptions,
@@ -21,9 +22,10 @@ export default function registerCommitLog(hunk: HunkExtensionAPI): void {
     // A throwing transform costs the reviewer the whole changeset, so every
     // failure here degrades to the review Hunk built without us.
     try {
+      const git = gitRunner(ctx.cwd);
       const review = resolveSeries(
         changeset.title,
-        gitRunner(ctx.cwd),
+        git,
         options,
         (message) => hunk.log(message),
         seriesSnapshot().commits,
@@ -33,7 +35,12 @@ export default function registerCommitLog(hunk: HunkExtensionAPI): void {
         return changeset;
       }
 
-      publishSeries({ commits: review.commits, position: review.position });
+      const head = review.commits[review.position];
+      publishSeries({
+        commits: review.commits,
+        position: review.position,
+        message: head === undefined ? null : readMessage(git, head.sha),
+      });
       return { ...changeset, title: seriesTitle(review) };
     } catch (error) {
       publishSeries(EMPTY_SERIES);
@@ -54,8 +61,22 @@ export default function registerCommitLog(hunk: HunkExtensionAPI): void {
     component: CommitLogPane,
   });
 
+  hunk.registerPane({
+    id: "message",
+    title: "Commit message",
+    placement: "top",
+    height: { preferred: 8, min: 3, max: 16 },
+    defaultOpen: true,
+    available: () => seriesSnapshot().message !== null,
+    component: MessagePane,
+  });
+
   hunk.registerCommand({ id: "toggle", title: "Toggle the commit list", key: "h" }, (ctx) => {
     ctx.panes.toggle("commits");
+  });
+
+  hunk.registerCommand({ id: "message", title: "Toggle the commit message", key: "i" }, (ctx) => {
+    ctx.panes.toggle("message");
   });
 
   // `]` and `[` are already next and previous hunk, and a built-in keeps a
