@@ -13,10 +13,13 @@
     "noUncheckedIndexedAccess": true,
     "noEmit": true,
     "skipLibCheck": true,
-    "allowImportingTsExtensions": true
+    "allowImportingTsExtensions": true,
+    "jsx": "react-jsx",
+    "jsxImportSource": "@opentui/react"
   },
   "include": [
-    "index.ts",
+    "*.ts",
+    "*.tsx",
     "test"
   ]
 }

@@ -8,7 +8,7 @@ import {
   seriesTitle,
   type GitRunner,
   type SeriesOptions,
-} from "../index.ts";
+} from "../series.ts";
 
 const REPO_ROOT = "/checkouts/demo";
 const REPO_NAME = "demo";
