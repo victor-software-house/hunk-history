@@ -42,6 +42,27 @@ export function subscribeSeries(listener: () => void): () => void {
   };
 }
 
+/**
+ * The commit `delta` steps along the series from the reviewed one.
+ *
+ * Null at either end and outside a revision show. Stepping deliberately does
+ * not wrap: arriving at the oldest commit of a branch by pressing "next" once
+ * more would tell the reviewer nothing about where they are.
+ */
+export function neighbour(
+  snapshot: SeriesSnapshot,
+  delta: number,
+  from: string | null = null,
+): SeriesCommit | null {
+  if (snapshot.position === null) {
+    return null;
+  }
+
+  const requested = from === null ? -1 : snapshot.commits.findIndex((c) => c.sha === from);
+  const base = requested < 0 ? snapshot.position : requested;
+  return snapshot.commits[base + delta] ?? null;
+}
+
 function sameSeries(left: SeriesSnapshot, right: SeriesSnapshot): boolean {
   return (
     left.position === right.position &&

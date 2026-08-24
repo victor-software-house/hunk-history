@@ -3,7 +3,9 @@ import { beforeEach, test } from "node:test";
 import {
   findSessionId,
   loadCommit,
+  pendingCommit,
   requestCommit,
+  resetPending,
   resetSessionId,
   type CommandRunner,
 } from "../session.ts";
@@ -43,7 +45,41 @@ function daemon(options: { sessions?: string; reload?: string | null } = {}): Fa
 
 beforeEach(() => {
   resetSessionId();
+  resetPending();
 });
+
+/** A daemon whose reloads finish only when the test says so. */
+function deferredCli(): FakeCli & { finish: () => void } {
+  const calls: string[][] = [];
+  const waiting: ((value: string | null) => void)[] = [];
+  return {
+    calls,
+    finish: () => {
+      for (const resolve of waiting.splice(0)) {
+        resolve("Reloaded session");
+      }
+    },
+    run: (args) => {
+      calls.push([...args]);
+      return args[1] === "list"
+        ? Promise.resolve(listing({ pid: OWN_PID, sessionId: SESSION_ID }))
+        : new Promise((resolve) => {
+            waiting.push(resolve);
+          });
+    },
+  };
+}
+
+/** Let every microtask settle, the way the review loop does between frames. */
+function settle(): Promise<void> {
+  return new Promise((resolve) => {
+    setImmediate(resolve);
+  });
+}
+
+function reloadedShas(calls: string[][]): (string | undefined)[] {
+  return calls.filter((call) => call[1] === "reload").map((call) => call[5]);
+}
 
 test("the window is found by its own pid, not by its repository", () => {
   const rows = listing(
@@ -105,25 +141,76 @@ test("a refused reload names the commit that did not load", async () => {
   assert.match(problem ?? "", /cannot load 73f50cf2/);
 });
 
-test("a second click while one is in flight is dropped", async () => {
-  const reported: string[] = [];
-  let release: (value: string | null) => void = () => {};
-  const calls: string[][] = [];
-  const run: CommandRunner = (args) => {
-    calls.push([...args]);
-    return args[1] === "list"
-      ? Promise.resolve(listing({ pid: OWN_PID, sessionId: SESSION_ID }))
-      : new Promise((resolve) => {
-          release = resolve;
-        });
-  };
+test("a request made while one is in flight runs after it", async () => {
+  const cli = deferredCli();
+  const deps = { run: cli.run, pid: OWN_PID };
+  const quiet = () => {};
 
-  requestCommit(SHA, (message) => reported.push(message), { run, pid: OWN_PID });
-  await new Promise((resolve) => setImmediate(resolve));
-  requestCommit("f".repeat(40), (message) => reported.push(message), { run, pid: OWN_PID });
-  release("Reloaded session");
-  await new Promise((resolve) => setImmediate(resolve));
+  requestCommit("a".repeat(40), quiet, deps);
+  await settle();
+  requestCommit("b".repeat(40), quiet, deps);
+  assert.deepEqual(reloadedShas(cli.calls), ["a".repeat(40)], "one reload at a time");
 
-  assert.deepEqual(calls.filter((call) => call[1] === "reload").map((call) => call[5]), [SHA]);
-  assert.deepEqual(reported, []);
+  cli.finish();
+  await settle();
+  await settle();
+  cli.finish();
+  await settle();
+
+  assert.deepEqual(reloadedShas(cli.calls), ["a".repeat(40), "b".repeat(40)]);
+});
+
+test("a burst of steps loads where the reviewer stopped, not every stop", async () => {
+  const cli = deferredCli();
+  const deps = { run: cli.run, pid: OWN_PID };
+  const quiet = () => {};
+
+  requestCommit("a".repeat(40), quiet, deps);
+  await settle();
+  requestCommit("b".repeat(40), quiet, deps);
+  requestCommit("c".repeat(40), quiet, deps);
+
+  cli.finish();
+  await settle();
+  await settle();
+  cli.finish();
+  await settle();
+
+  assert.deepEqual(
+    reloadedShas(cli.calls),
+    ["a".repeat(40), "c".repeat(40)],
+    "b was passed through, never stopped on",
+  );
+});
+
+test("asking again for the commit already loading costs nothing", async () => {
+  const cli = deferredCli();
+  const deps = { run: cli.run, pid: OWN_PID };
+  const quiet = () => {};
+
+  requestCommit(SHA, quiet, deps);
+  await settle();
+  requestCommit(SHA, quiet, deps);
+
+  cli.finish();
+  await settle();
+  await settle();
+
+  assert.deepEqual(reloadedShas(cli.calls), [SHA]);
+});
+
+test("the pending target is what stepping counts from", async () => {
+  const cli = deferredCli();
+  const deps = { run: cli.run, pid: OWN_PID };
+
+  assert.equal(pendingCommit(), null);
+  requestCommit(SHA, () => {}, deps);
+  await settle();
+  assert.equal(pendingCommit(), SHA);
+
+  cli.finish();
+  await settle();
+  await settle();
+
+  assert.equal(pendingCommit(), null, "a settled window is not on its way anywhere");
 });

@@ -99,30 +99,57 @@ export async function loadCommit(sha: string, deps: SessionDeps): Promise<string
   return result === null ? `cannot load ${sha.slice(0, 8)}` : null;
 }
 
-let pending: string | null = null;
+let inFlight: string | null = null;
+let queued: string | null = null;
 
 /**
- * Ask this window to show one commit, at most one request at a time.
+ * The commit this window is on its way to, if it is on its way anywhere.
  *
- * A click is not a promise the caller can await: a pane row handler returns
- * immediately and the review arrives when the daemon has rebuilt it. Dropping
- * a second request while one is in flight keeps a double click from queueing
- * two reloads whose order nothing guarantees.
+ * Stepping has to count from here rather than from what is loaded: a reload
+ * takes long enough that a reviewer pressing "previous" three times does it
+ * before the first one lands, and counting from the loaded commit would make
+ * all three ask for the same neighbour.
+ */
+export function pendingCommit(): string | null {
+  return queued ?? inFlight;
+}
+
+/** Forget any request in progress; only tests need this. */
+export function resetPending(): void {
+  inFlight = null;
+  queued = null;
+}
+
+/**
+ * Ask this window to show one commit.
+ *
+ * A click or a keypress is not a promise the caller can await: the handler
+ * returns at once and the review arrives when the daemon has rebuilt it. One
+ * reload runs at a time, because two in flight land in an order nothing
+ * guarantees; further requests coalesce, so a burst of steps loads the commit
+ * the reviewer stopped on rather than every commit they passed through.
  */
 export function requestCommit(
   sha: string,
   report: (message: string, type?: "info" | "warning" | "error") => void,
   deps: SessionDeps = { run: hunkRunner(), pid: process.pid },
 ): void {
-  if (pending !== null) {
+  if (inFlight !== null) {
+    queued = sha === inFlight ? null : sha;
     return;
   }
 
-  pending = sha;
+  inFlight = sha;
   void loadCommit(sha, deps).then((problem) => {
-    pending = null;
+    inFlight = null;
     if (problem !== null) {
       report(problem, "warning");
+    }
+
+    const next = queued;
+    queued = null;
+    if (next !== null && next !== sha) {
+      requestCommit(next, report, deps);
     }
   });
 }

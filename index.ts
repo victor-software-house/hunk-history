@@ -8,7 +8,8 @@ import {
   seriesTitle,
   type SeriesOptions,
 } from "./series.ts";
-import { EMPTY_SERIES, publishSeries, seriesSnapshot } from "./store.ts";
+import { pendingCommit, requestCommit } from "./session.ts";
+import { EMPTY_SERIES, neighbour, publishSeries, seriesSnapshot } from "./store.ts";
 
 export default function registerCommitLog(hunk: HunkExtensionAPI): void {
   const options: SeriesOptions = {
@@ -56,6 +57,28 @@ export default function registerCommitLog(hunk: HunkExtensionAPI): void {
   hunk.registerCommand({ id: "toggle", title: "Toggle the commit list", key: "h" }, (ctx) => {
     ctx.panes.toggle("commits");
   });
+
+  // `]` and `[` are already next and previous hunk, and a built-in keeps a
+  // chord an extension asks for, so stepping between commits gets n and p.
+  for (const step of [
+    { id: "next", title: "Next commit in the series", key: "n", delta: 1, edge: "newest" },
+    { id: "previous", title: "Previous commit in the series", key: "p", delta: -1, edge: "oldest" },
+  ] as const) {
+    hunk.registerCommand({ id: step.id, title: step.title, key: step.key }, (ctx) => {
+      const snapshot = seriesSnapshot();
+      if (snapshot.position === null) {
+        return;
+      }
+
+      const target = neighbour(snapshot, step.delta, pendingCommit());
+      if (target === null) {
+        ctx.notify(`already at the ${step.edge} commit in the series`, "info");
+        return;
+      }
+
+      requestCommit(target.sha, ctx.notify);
+    });
+  }
 
   // Hunk shows the side-pane area on its own only in a full-width viewport
   // (220 columns), and filters every left and right pane out below that.

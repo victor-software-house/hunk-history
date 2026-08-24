@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { beforeEach, test } from "node:test";
 import {
   EMPTY_SERIES,
+  neighbour,
   publishSeries,
   seriesSnapshot,
   subscribeSeries,
@@ -88,4 +89,29 @@ test("an unsubscribed pane stops hearing about reloads", () => {
   publishSeries({ commits: SERIES, position: 0 });
 
   assert.equal(woken, 0);
+});
+
+test("stepping moves along the series from the reviewed commit", () => {
+  const snapshot = { commits: SERIES, position: 1 } as const;
+
+  assert.equal(neighbour(snapshot, 1)?.abbrev, "3333333");
+  assert.equal(neighbour(snapshot, -1)?.abbrev, "1111111");
+});
+
+test("stepping stops at both ends rather than wrapping", () => {
+  assert.equal(neighbour({ commits: SERIES, position: 2 }, 1), null);
+  assert.equal(neighbour({ commits: SERIES, position: 0 }, -1), null);
+});
+
+test("stepping outside a commit review has nowhere to go", () => {
+  assert.equal(neighbour({ commits: [], position: null }, 1), null);
+  assert.equal(neighbour({ commits: SERIES, position: null }, -1), null);
+});
+
+test("stepping counts from the commit already being loaded", () => {
+  const snapshot = { commits: SERIES, position: 2 } as const;
+
+  assert.equal(neighbour(snapshot, -1, SERIES[1]!.sha)?.abbrev, "1111111");
+  assert.equal(neighbour(snapshot, -1, "unknown-sha")?.abbrev, "2222222");
+  assert.equal(neighbour(snapshot, -1, SERIES[0]!.sha), null, "the edge holds while loading too");
 });
