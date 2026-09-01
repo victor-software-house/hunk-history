@@ -64,8 +64,8 @@ the config table below; a different name silently renames all of them.
 
 ```toml
 [extension.hunk-commit-log]
-range = "main..HEAD"   # the series to review; default: recent history
-limit = 20             # commits to gather when no range is set; max 500
+range = "main..HEAD"   # the series to review; default: your unpushed commits
+limit = 20             # most commits to gather when no range is set; max 500
 messageRows = 8        # rows the message pane starts with; 3 to 60
 ```
 
@@ -73,18 +73,27 @@ messageRows = 8        # rows the message pane starts with; 3 to 60
 series is exactly that range, which is usually what a reviewer means by "this
 branch".
 
-**Without a range**, the series is the `limit` commits ending at the commit you
-opened. That always contains what you are looking at, which is why it is the
-default, but it also means the review starts at the newest end of the series
-where only `p` can move. Set `range` to land inside a branch with both
-directions available.
+**Without a range**, the series is `@{upstream}..HEAD`: the commits your branch
+has added on top of what it has pushed, newest `limit` of them. That is the
+work you are reviewing on a branch you are still building, and because the
+range ends at the branch tip rather than at the commit you opened, `n` has
+somewhere to go from anywhere inside it.
 
-A configured range that does not contain the reviewed commit is not an error:
-the series falls back to recent history, silently. The extension records why
-through `hunk.log`, which Hunk 0.19.0 collects but does not appear to display
-anywhere, so in practice the fallback is unobservable: if the position looks
-like plain recent history rather than your branch, the range is the thing to
-check.
+**When there is no such work**, the series is the `limit` commits ending at the
+commit you opened. That is what you get on a branch in sync with its upstream,
+on a branch with no upstream at all, on a detached HEAD, and whenever you open
+a commit that has already been pushed — the reviewed commit is not among the
+unpushed ones, so the series has to come from somewhere that holds it. This
+fallback is the old default, and it starts the review at the newest end of the
+series where only `p` can move.
+
+A configured range that does not contain the reviewed commit is not an error
+either: it falls the same way, straight past the unpushed commits to recent
+history. The extension records why through `hunk.log`, which Hunk 0.19.0
+collects but does not appear to display anywhere, so in practice the fallback
+is unobservable: if the position looks like plain recent history rather than
+your branch, the range is the thing to check. The unpushed default never logs,
+because nothing was asked for that it failed to honour.
 
 **`messageRows`** is the height the message pane opens at. Drag its lower edge
 to resize it in a session; Hunk keeps that size in session state and forgets it

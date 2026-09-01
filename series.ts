@@ -10,7 +10,7 @@ export interface ReviewSeries {
   position: number;
 }
 
-/** Which commits to gather when the review does not name a range itself. */
+/** Which commits to gather: a range to prefer, and a ceiling on the rest. */
 export interface SeriesOptions {
   range: string | null;
   limit: number;
@@ -27,6 +27,15 @@ export const DEFAULT_MESSAGE_ROWS = 8;
 const MIN_MESSAGE_ROWS = 3;
 const MAX_MESSAGE_ROWS = 60;
 const GIT_TIMEOUT_MS = 2_000;
+/**
+ * The series a reviewer means when they configure nothing.
+ *
+ * `@{upstream}` is the tracking branch of the checked-out branch, so this is
+ * the work added since the last push. The right end is `HEAD` and not the
+ * reviewed commit: stepping back into that work has to keep the commits above
+ * it, or `n` would have nowhere left to go.
+ */
+const UNPUSHED_RANGE = "@{upstream}..HEAD";
 
 /**
  * Run git in one working directory.
@@ -151,9 +160,11 @@ export function configuredLimit(config: unknown): number {
 /**
  * The series the reviewed commit belongs to, oldest first.
  *
- * A configured range that does not contain the reviewed commit is the reviewer
- * looking outside the branch they configured, not an error: fall back to the
- * commits leading up to what they actually opened.
+ * A configured range is honoured, or abandoned when it does not contain the
+ * reviewed commit: that is the reviewer looking outside the branch they
+ * configured, not an error. With nothing configured the series is the commits
+ * not yet pushed. Either way, a series that does not hold what is on screen
+ * gives way to the `limit` commits leading up to it.
  */
 function buildSeries(
   git: GitRunner,
@@ -170,6 +181,17 @@ function buildSeries(
       `range "${options.range}" does not contain ${head.abbrev}; ` +
         `using the ${options.limit} commits before it`,
     );
+  } else {
+    // Silent when it finds nothing: git exits non-zero on a detached HEAD or a
+    // branch with no upstream, which reads here as the empty list a branch in
+    // sync returns, and neither is a reviewer's wish going unmet.
+    const unpushed = readCommits(
+      git,
+      git(["rev-list", "--reverse", "-n", String(options.limit), UNPUSHED_RANGE, "--"]) ?? "",
+    );
+    if (unpushed.some((commit) => commit.sha === head.sha)) {
+      return unpushed;
+    }
   }
 
   const recent = git(["rev-list", "-n", String(options.limit), head.sha, "--"]);
