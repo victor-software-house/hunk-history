@@ -7,16 +7,24 @@ import {
   expandedPane,
   messagePanes,
   messageRowsNeeded,
-  rungFor,
   neighbour,
+  rungFor,
+  isSelectedIndex,
+  publishRange,
   publishSeries,
+  selectedRange,
   seriesSnapshot,
   subscribeSeries,
   type SeriesCommit,
 } from "../store.ts";
 
 function commit(n: number): SeriesCommit {
-  return { sha: `${n}`.repeat(40), abbrev: `${n}`.repeat(7), subject: `subject ${n}` };
+  return {
+    sha: `${n}`.repeat(40),
+    abbrev: `${n}`.repeat(7),
+    subject: `subject ${n}`,
+    baseSha: n === 1 ? "0".repeat(40) : `${n - 1}`.repeat(40),
+  };
 }
 
 const SERIES = [commit(1), commit(2), commit(3)];
@@ -35,7 +43,7 @@ test("publishing a series wakes every subscriber", () => {
     woken += 1;
   });
 
-  publishSeries({ commits: SERIES, position: 1, message: null });
+  publishSeries({ commits: SERIES, position: 1, range: null, message: null });
 
   assert.equal(woken, 1);
   assert.equal(seriesSnapshot().position, 1);
@@ -44,14 +52,14 @@ test("publishing a series wakes every subscriber", () => {
 });
 
 test("an unchanged series keeps its snapshot and wakes nobody", () => {
-  publishSeries({ commits: SERIES, position: 1, message: null });
+  publishSeries({ commits: SERIES, position: 1, range: null, message: null });
   const before = seriesSnapshot();
   let woken = 0;
   const unsubscribe = subscribeSeries(() => {
     woken += 1;
   });
 
-  publishSeries({ commits: [commit(1), commit(2), commit(3)], position: 1, message: null });
+  publishSeries({ commits: [commit(1), commit(2), commit(3)], position: 1, range: null, message: null });
 
   assert.equal(woken, 0, "a refresh that changes nothing must not repaint");
   assert.equal(seriesSnapshot(), before, "React compares snapshots by identity");
@@ -59,13 +67,13 @@ test("an unchanged series keeps its snapshot and wakes nobody", () => {
 });
 
 test("stepping to another commit in the same series is a change", () => {
-  publishSeries({ commits: SERIES, position: 1, message: null });
+  publishSeries({ commits: SERIES, position: 1, range: null, message: null });
   let woken = 0;
   const unsubscribe = subscribeSeries(() => {
     woken += 1;
   });
 
-  publishSeries({ commits: SERIES, position: 2, message: null });
+  publishSeries({ commits: SERIES, position: 2, range: null, message: null });
 
   assert.equal(woken, 1);
   assert.equal(seriesSnapshot().position, 2);
@@ -73,13 +81,13 @@ test("stepping to another commit in the same series is a change", () => {
 });
 
 test("a different history of the same length is a change", () => {
-  publishSeries({ commits: SERIES, position: 0, message: null });
+  publishSeries({ commits: SERIES, position: 0, range: null, message: null });
   let woken = 0;
   const unsubscribe = subscribeSeries(() => {
     woken += 1;
   });
 
-  publishSeries({ commits: [commit(4), commit(5), commit(6)], position: 0, message: null });
+  publishSeries({ commits: [commit(4), commit(5), commit(6)], position: 0, range: null, message: null });
 
   assert.equal(woken, 1);
   unsubscribe();
@@ -92,44 +100,103 @@ test("an unsubscribed pane stops hearing about reloads", () => {
   });
 
   unsubscribe();
-  publishSeries({ commits: SERIES, position: 0, message: null });
+  publishSeries({ commits: SERIES, position: 0, range: null, message: null });
 
   assert.equal(woken, 0);
 });
 
 test("stepping moves along the series from the reviewed commit", () => {
-  const snapshot = { commits: SERIES, position: 1, message: null } as const;
+  const snapshot = { commits: SERIES, position: 1, range: null, message: null } as const;
 
   assert.equal(neighbour(snapshot, 1)?.abbrev, "3333333");
   assert.equal(neighbour(snapshot, -1)?.abbrev, "1111111");
 });
 
 test("stepping stops at both ends rather than wrapping", () => {
-  assert.equal(neighbour({ commits: SERIES, position: 2, message: null }, 1), null);
-  assert.equal(neighbour({ commits: SERIES, position: 0, message: null }, -1), null);
+  assert.equal(neighbour({ commits: SERIES, position: 2, range: null, message: null }, 1), null);
+  assert.equal(neighbour({ commits: SERIES, position: 0, range: null, message: null }, -1), null);
 });
 
 test("stepping outside a commit review has nowhere to go", () => {
-  assert.equal(neighbour({ commits: [], position: null, message: null }, 1), null);
-  assert.equal(neighbour({ commits: SERIES, position: null, message: null }, -1), null);
+  assert.equal(neighbour({ commits: [], position: null, range: null, message: null }, 1), null);
+  assert.equal(neighbour({ commits: SERIES, position: null, range: null, message: null }, -1), null);
 });
 
 test("stepping counts from the commit already being loaded", () => {
-  const snapshot = { commits: SERIES, position: 2, message: null } as const;
+  const snapshot = { commits: SERIES, position: 2, range: null, message: null } as const;
 
   assert.equal(neighbour(snapshot, -1, SERIES[1]!.sha)?.abbrev, "1111111");
   assert.equal(neighbour(snapshot, -1, "unknown-sha")?.abbrev, "2222222");
   assert.equal(neighbour(snapshot, -1, SERIES[0]!.sha), null, "the edge holds while loading too");
 });
 
+test("selection spans inclusively from the single-commit anchor", () => {
+  const snapshot = { commits: SERIES, position: 2, range: null, message: null } as const;
+  const range = selectedRange(snapshot, 0);
+
+  assert.deepEqual(range, {
+    anchor: 2,
+    endpoint: 0,
+    start: 0,
+    end: 2,
+    revisionRange: `${SERIES[0]!.baseSha}..${SERIES[2]!.sha}`,
+  });
+});
+
+test("extending a range keeps its original anchor", () => {
+  const initial = selectedRange(
+    { commits: SERIES, position: 1, range: null, message: null },
+    2,
+  );
+  assert.ok(initial);
+  const extended = selectedRange(
+    { commits: SERIES, position: 2, range: initial, message: null },
+    0,
+  );
+
+  assert.equal(extended?.anchor, 1);
+  assert.equal(extended?.endpoint, 0);
+  assert.equal(extended?.start, 0);
+  assert.equal(extended?.end, 1);
+});
+
+test("publishing a range selects every row and clears the single commit message", () => {
+  publishSeries({
+    commits: SERIES,
+    position: 0,
+    range: null,
+    message: { author: "Ada", timestamp: "2026-08-01T00:00:00Z", body: "why" },
+  });
+  const range = selectedRange(seriesSnapshot(), 2);
+  assert.ok(range);
+
+  publishRange(range);
+
+  assert.equal(seriesSnapshot().position, 2);
+  assert.equal(seriesSnapshot().message, null);
+  assert.deepEqual(
+    SERIES.map((_, index) => isSelectedIndex(seriesSnapshot(), index)),
+    [true, true, true],
+  );
+});
+
+test("a root commit uses its empty-tree base in an inclusive range", () => {
+  const range = selectedRange(
+    { commits: SERIES, position: 1, range: null, message: null },
+    0,
+  );
+
+  assert.equal(range?.revisionRange, `${"0".repeat(40)}..${SERIES[1]!.sha}`);
+});
+
 test("an amended message repaints even when the series is identical", () => {
-  publishSeries({ commits: SERIES, position: 1, message: { author: "Ada", date: "d", body: "a" } });
+  publishSeries({ commits: SERIES, position: 1, range: null, message: { author: "Ada", timestamp: "d", body: "a" } });
   let woken = 0;
   const unsubscribe = subscribeSeries(() => {
     woken += 1;
   });
 
-  publishSeries({ commits: SERIES, position: 1, message: { author: "Ada", date: "d", body: "b" } });
+  publishSeries({ commits: SERIES, position: 1, range: null, message: { author: "Ada", timestamp: "d", body: "b" } });
 
   assert.equal(woken, 1);
   assert.equal(seriesSnapshot().message?.body, "b");
@@ -137,15 +204,15 @@ test("an amended message repaints even when the series is identical", () => {
 });
 
 test("the same message twice is not a change", () => {
-  const message = { author: "Ada", date: "d", body: "a" };
-  publishSeries({ commits: SERIES, position: 1, message });
+  const message = { author: "Ada", timestamp: "d", body: "a" };
+  publishSeries({ commits: SERIES, position: 1, range: null, message });
   const before = seriesSnapshot();
   let woken = 0;
   const unsubscribe = subscribeSeries(() => {
     woken += 1;
   });
 
-  publishSeries({ commits: SERIES, position: 1, message: { ...message } });
+  publishSeries({ commits: SERIES, position: 1, range: null, message: { ...message } });
 
   assert.equal(woken, 0);
   assert.equal(seriesSnapshot(), before);
@@ -155,7 +222,7 @@ test("the same message twice is not a change", () => {
 function message(bodyLines: number) {
   return {
     author: "Ada",
-    date: "2026-08-01",
+    timestamp: "2026-08-01T00:00:00Z",
     body: bodyLines === 0 ? "" : Array.from({ length: bodyLines }, (_, i) => `line ${i}`).join("\n"),
   };
 }

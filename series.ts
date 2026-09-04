@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { basename } from "node:path";
-import type { CommitMessage, SeriesCommit } from "./store.ts";
+import type { CommitMessage, SeriesCommit, SeriesSnapshot } from "./store.ts";
 
 /** The reviewed commit, and the series it belongs to. */
 export interface ReviewSeries {
@@ -61,17 +61,26 @@ export function gitRunner(cwd: string): GitRunner {
 
 /** Read one commit, or null when the rev names nothing. */
 function readCommit(git: GitRunner, rev: string): SeriesCommit | null {
-  const line = git(["log", "-1", "--no-patch", "--format=%H%x00%h%x00%s", rev, "--"]);
+  const line = git([
+    "log",
+    "-1",
+    "--no-patch",
+    "--format=%H%x00%h%x00%s%x00%P",
+    rev,
+    "--",
+  ]);
   if (line === null) {
     return null;
   }
 
-  const [sha, abbrev, subject] = line.split("\0");
+  const [sha, abbrev, subject, parents = ""] = line.split("\0");
   if (sha === undefined || abbrev === undefined || subject === undefined) {
     return null;
   }
 
-  return { sha, abbrev, subject };
+  const firstParent = parents.trim().split(/\s+/)[0] || null;
+  const baseSha = firstParent ?? git(["hash-object", "-t", "tree", "--stdin"]);
+  return { sha, abbrev, subject, baseSha };
 }
 
 /**
@@ -85,8 +94,7 @@ export function readMessage(git: GitRunner, rev: string): CommitMessage | null {
     "log",
     "-1",
     "--no-patch",
-    "--date=short",
-    "--format=%an%x00%ad%x00%b",
+    "--format=%an%x00%aI%x00%b",
     rev,
     "--",
   ]);
@@ -94,12 +102,12 @@ export function readMessage(git: GitRunner, rev: string): CommitMessage | null {
     return null;
   }
 
-  const [author, date, body] = text.split("\0");
-  if (author === undefined || date === undefined) {
+  const [author, timestamp, body] = text.split("\0");
+  if (author === undefined || timestamp === undefined) {
     return null;
   }
 
-  return { author, date, body: (body ?? "").trim() };
+  return { author, timestamp, body: (body ?? "").trim() };
 }
 
 /** Read every commit a revision list names, oldest first. */
@@ -257,4 +265,40 @@ export function seriesTitle(review: ReviewSeries): string {
 
   const place = `${review.position + 1}/${review.commits.length}`;
   return `${review.repoName} ${place} ${head.abbrev} ${head.subject}`;
+}
+
+/** Recognize the concrete range this extension most recently asked Hunk to load. */
+export function resolveRangeReview(
+  title: string,
+  git: GitRunner,
+  snapshot: SeriesSnapshot,
+): { repoName: string } | null {
+  if (snapshot.range === null || snapshot.position === null) {
+    return null;
+  }
+
+  const repoRoot = git(["rev-parse", "--show-toplevel"]);
+  if (repoRoot === null) {
+    return null;
+  }
+
+  const repoName = basename(repoRoot);
+  return title === `${repoName} ${snapshot.range.revisionRange}` ? { repoName } : null;
+}
+
+/** Describe an inclusive selection without exposing its long concrete Git range. */
+export function rangeTitle(repoName: string, snapshot: SeriesSnapshot): string {
+  const range = snapshot.range;
+  if (range === null) {
+    return repoName;
+  }
+
+  const oldest = snapshot.commits[range.start];
+  const newest = snapshot.commits[range.end];
+  if (!oldest || !newest) {
+    return repoName;
+  }
+
+  const place = `${range.start + 1}–${range.end + 1}/${snapshot.commits.length}`;
+  return `${repoName} ${place} ${oldest.abbrev}…${newest.abbrev}`;
 }

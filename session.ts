@@ -81,26 +81,41 @@ export function resetSessionId(): void {
   cachedSessionId = null;
 }
 
-/**
- * Replace this window's review with one commit.
- *
- * The extension API can navigate inside a loaded changeset but cannot load a
- * different one, so the way to move between commits is the session daemon that
- * every window already registers with. Resolves what went wrong, or null when
- * the window followed.
- */
-export async function loadCommit(sha: string, deps: SessionDeps): Promise<string | null> {
+/** One review the extension can ask the live Hunk window to load. */
+type ReviewTarget =
+  | { kind: "commit"; value: string }
+  | { kind: "range"; value: string; onStart: () => void };
+
+/** Replace this window's review with one target. */
+async function loadReview(target: ReviewTarget, deps: SessionDeps): Promise<string | null> {
   const id = await sessionId(deps);
   if (id === null) {
     return "cannot find this Hunk window in the session daemon";
   }
 
-  const result = await deps.run(["session", "reload", id, "--", "show", sha]);
-  return result === null ? `cannot load ${sha.slice(0, 8)}` : null;
+  const command = target.kind === "commit" ? "show" : "diff";
+  const result = await deps.run(["session", "reload", id, "--", command, target.value]);
+  const label = target.kind === "commit" ? target.value.slice(0, 8) : "the selected range";
+  return result === null ? `cannot load ${label}` : null;
 }
 
-let inFlight: string | null = null;
-let queued: string | null = null;
+/** Replace this window's review with one commit. */
+export function loadCommit(sha: string, deps: SessionDeps): Promise<string | null> {
+  return loadReview({ kind: "commit", value: sha }, deps);
+}
+
+/** Replace this window's review with one concrete tree range. */
+export function loadRange(range: string, deps: SessionDeps): Promise<string | null> {
+  return loadReview({ kind: "range", value: range, onStart: () => {} }, deps);
+}
+
+let inFlight: ReviewTarget | null = null;
+let queued: ReviewTarget | null = null;
+
+/** Report whether two requests name the same review. */
+function sameTarget(left: ReviewTarget, right: ReviewTarget): boolean {
+  return left.kind === right.kind && left.value === right.value;
+}
 
 /**
  * The commit this window is on its way to, if it is on its way anywhere.
@@ -111,7 +126,8 @@ let queued: string | null = null;
  * all three ask for the same neighbour.
  */
 export function pendingCommit(): string | null {
-  return queued ?? inFlight;
+  const target = queued ?? inFlight;
+  return target?.kind === "commit" ? target.value : null;
 }
 
 /** Forget any request in progress; only tests need this. */
@@ -134,13 +150,33 @@ export function requestCommit(
   report: (message: string, type?: "info" | "warning" | "error") => void,
   deps: SessionDeps = { run: hunkRunner(), pid: process.pid },
 ): void {
+  requestReview({ kind: "commit", value: sha }, report, deps);
+}
+
+/** Ask this window to show one concrete inclusive range. */
+export function requestRange(
+  range: string,
+  report: (message: string, type?: "info" | "warning" | "error") => void,
+  onStart: () => void = () => {},
+  deps: SessionDeps = { run: hunkRunner(), pid: process.pid },
+): void {
+  requestReview({ kind: "range", value: range, onStart }, report, deps);
+}
+
+/** Serialize reloads and coalesce bursts to the last review the user requested. */
+function requestReview(
+  target: ReviewTarget,
+  report: (message: string, type?: "info" | "warning" | "error") => void,
+  deps: SessionDeps,
+): void {
   if (inFlight !== null) {
-    queued = sha === inFlight ? null : sha;
+    queued = sameTarget(target, inFlight) ? null : target;
     return;
   }
 
-  inFlight = sha;
-  void loadCommit(sha, deps).then((problem) => {
+  target.kind === "range" && target.onStart();
+  inFlight = target;
+  void loadReview(target, deps).then((problem) => {
     inFlight = null;
     if (problem !== null) {
       report(problem, "warning");
@@ -148,8 +184,8 @@ export function requestCommit(
 
     const next = queued;
     queued = null;
-    if (next !== null && next !== sha) {
-      requestCommit(next, report, deps);
+    if (next !== null && !sameTarget(next, target)) {
+      requestReview(next, report, deps);
     }
   });
 }

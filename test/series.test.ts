@@ -7,22 +7,51 @@ import {
   DEFAULT_LIMIT,
   DEFAULT_MESSAGE_ROWS,
   readMessage,
+  rangeTitle,
+  resolveRangeReview,
   resolveSeries,
   seriesTitle,
   type GitRunner,
   type SeriesOptions,
 } from "../series.ts";
+import type { SeriesCommit, SeriesSnapshot } from "../store.ts";
 
 const REPO_ROOT = "/checkouts/demo";
 const REPO_NAME = "demo";
+const EMPTY_TREE = "0".repeat(40);
 
 /** Five commits, oldest first, as the fake repository knows them. */
-const HISTORY = [
-  { sha: "1111111111111111111111111111111111111111", abbrev: "1111111", subject: "first" },
-  { sha: "2222222222222222222222222222222222222222", abbrev: "2222222", subject: "second" },
-  { sha: "3333333333333333333333333333333333333333", abbrev: "3333333", subject: "third" },
-  { sha: "4444444444444444444444444444444444444444", abbrev: "4444444", subject: "fourth" },
-  { sha: "5555555555555555555555555555555555555555", abbrev: "5555555", subject: "fifth" },
+const HISTORY: SeriesCommit[] = [
+  {
+    sha: "1".repeat(40),
+    abbrev: "1111111",
+    subject: "first",
+    baseSha: EMPTY_TREE,
+  },
+  {
+    sha: "2".repeat(40),
+    abbrev: "2222222",
+    subject: "second",
+    baseSha: "1".repeat(40),
+  },
+  {
+    sha: "3".repeat(40),
+    abbrev: "3333333",
+    subject: "third",
+    baseSha: "2".repeat(40),
+  },
+  {
+    sha: "4".repeat(40),
+    abbrev: "4444444",
+    subject: "fourth",
+    baseSha: "3".repeat(40),
+  },
+  {
+    sha: "5".repeat(40),
+    abbrev: "5555555",
+    subject: "fifth",
+    baseSha: "4".repeat(40),
+  },
 ];
 
 const DEFAULTS: SeriesOptions = { range: null, limit: DEFAULT_LIMIT };
@@ -59,17 +88,21 @@ function fakeRepo(options: { ranges?: Record<string, string[]>; repoRoot?: strin
     }
 
     if (args[0] === "log") {
-      const asking = args.includes("--date=short");
-      const commit = byRev.get((asking ? args[5] : args[4]) ?? "");
+      const commit = byRev.get(args.at(-2) ?? "");
       if (commit === undefined) {
         return null;
       }
-      if (!asking) {
-        return `${commit.sha}\0${commit.abbrev}\0${commit.subject}`;
+      if (args.some((arg) => arg.includes("%aI"))) {
+        return commit.abbrev === "3333333"
+          ? `Ada Lovelace\u00002026-08-01T21:04:05+03:00`
+          : `Ada Lovelace\u00002026-08-01T21:04:05+03:00\u0000body of ${commit.abbrev}\n`;
       }
-      return commit.abbrev === "3333333"
-        ? `Ada Lovelace\u00002026-08-01`
-        : `Ada Lovelace\u00002026-08-01\u0000body of ${commit.abbrev}\n`;
+      const parents = commit.baseSha === EMPTY_TREE ? "" : commit.baseSha;
+      return `${commit.sha}\0${commit.abbrev}\0${commit.subject}\0${parents}`;
+    }
+
+    if (args[0] === "hash-object") {
+      return EMPTY_TREE;
     }
 
     if (args[0] === "rev-list" && args[1] === "--reverse") {
@@ -268,6 +301,29 @@ test("the header names the position, the commit, and what it does", () => {
   );
 });
 
+test("an extension-initiated range keeps the held series visible", () => {
+  const { git } = fakeRepo();
+  const snapshot: SeriesSnapshot = {
+    commits: HISTORY,
+    position: 3,
+    range: {
+      anchor: 1,
+      endpoint: 3,
+      start: 1,
+      end: 3,
+      revisionRange: `${HISTORY[1]!.baseSha}..${HISTORY[3]!.sha}`,
+    },
+    message: null,
+  };
+
+  assert.deepEqual(
+    resolveRangeReview(`${REPO_NAME} ${snapshot.range!.revisionRange}`, git, snapshot),
+    { repoName: REPO_NAME },
+  );
+  assert.equal(rangeTitle(REPO_NAME, snapshot), "demo 2–4/5 2222222…4444444");
+  assert.equal(resolveRangeReview(`${REPO_NAME} working tree`, git, snapshot), null);
+});
+
 test("stepping inside the series on screen keeps that series", () => {
   const { git, calls } = fakeRepo();
   const anchor = HISTORY.slice(1, 4);
@@ -308,7 +364,7 @@ test("the reviewed commit's message is read whole", () => {
 
   assert.deepEqual(readMessage(git, HISTORY[1]!.sha), {
     author: "Ada Lovelace",
-    date: "2026-08-01",
+    timestamp: "2026-08-01T21:04:05+03:00",
     body: "body of 2222222",
   });
 });
@@ -318,7 +374,7 @@ test("a subject-only commit has an empty body, not a missing message", () => {
 
   assert.deepEqual(readMessage(git, HISTORY[2]!.sha), {
     author: "Ada Lovelace",
-    date: "2026-08-01",
+    timestamp: "2026-08-01T21:04:05+03:00",
     body: "",
   });
 });

@@ -9,25 +9,44 @@ export interface SeriesCommit {
   sha: string;
   abbrev: string;
   subject: string;
+  /** Tree to compare against when this commit is the oldest selected one. */
+  baseSha: string | null;
 }
 
 /** Everything the reviewed commit says beyond its subject. */
 export interface CommitMessage {
   author: string;
-  date: string;
+  /** Git's strict ISO author timestamp, including the original UTC offset. */
+  timestamp: string;
   /** The message body, subject line excluded; empty for a subject-only commit. */
   body: string;
 }
 
-/** What the panes paint: the series, which commit is on screen, and what it says. */
+/** One inclusive contiguous selection in the oldest-first commit series. */
+export interface SeriesRange {
+  readonly anchor: number;
+  readonly endpoint: number;
+  readonly start: number;
+  readonly end: number;
+  /** Concrete tree range passed to `hunk diff`. */
+  readonly revisionRange: string;
+}
+
+/** What the panes paint: the series, active endpoint, optional range, and message. */
 export interface SeriesSnapshot {
   readonly commits: readonly SeriesCommit[];
-  /** Index into `commits`, or null when the review is not one commit. */
+  /** Index into `commits`, or null when the review is not a commit-backed review. */
   readonly position: number | null;
+  readonly range: SeriesRange | null;
   readonly message: CommitMessage | null;
 }
 
-export const EMPTY_SERIES: SeriesSnapshot = { commits: [], position: null, message: null };
+export const EMPTY_SERIES: SeriesSnapshot = {
+  commits: [],
+  position: null,
+  range: null,
+  message: null,
+};
 
 let snapshot: SeriesSnapshot = EMPTY_SERIES;
 const listeners = new Set<() => void>();
@@ -127,17 +146,82 @@ export function neighbour(
   return snapshot.commits[base + delta] ?? null;
 }
 
+/** Build the inclusive range from the current anchor to one clicked endpoint. */
+export function selectedRange(snapshot: SeriesSnapshot, endpoint: number): SeriesRange | null {
+  if (snapshot.position === null || endpoint < 0 || endpoint >= snapshot.commits.length) {
+    return null;
+  }
+
+  const anchor = snapshot.range?.anchor ?? snapshot.position;
+  if (anchor === endpoint) {
+    return null;
+  }
+
+  const start = Math.min(anchor, endpoint);
+  const end = Math.max(anchor, endpoint);
+  const oldest = snapshot.commits[start];
+  const newest = snapshot.commits[end];
+  if (!oldest?.baseSha || !newest) {
+    return null;
+  }
+
+  return {
+    anchor,
+    endpoint,
+    start,
+    end,
+    revisionRange: `${oldest.baseSha}..${newest.sha}`,
+  };
+}
+
+/** Report whether one row belongs to the current inclusive range. */
+export function isSelectedIndex(snapshot: SeriesSnapshot, index: number): boolean {
+  return snapshot.range === null
+    ? index === snapshot.position
+    : index >= snapshot.range.start && index <= snapshot.range.end;
+}
+
+/** Publish a range before asking Hunk to replace the review with its net diff. */
+export function publishRange(range: SeriesRange): void {
+  publishSeries({
+    ...snapshot,
+    position: range.endpoint,
+    range,
+    message: null,
+  });
+}
+
 function sameMessage(left: CommitMessage | null, right: CommitMessage | null): boolean {
   if (left === null || right === null) {
     return left === right;
   }
 
-  return left.author === right.author && left.date === right.date && left.body === right.body;
+  return (
+    left.author === right.author &&
+    left.timestamp === right.timestamp &&
+    left.body === right.body
+  );
+}
+
+/** Compare range identity without making callers preserve object identity. */
+function sameRange(left: SeriesRange | null, right: SeriesRange | null): boolean {
+  if (left === null || right === null) {
+    return left === right;
+  }
+
+  return (
+    left.anchor === right.anchor &&
+    left.endpoint === right.endpoint &&
+    left.start === right.start &&
+    left.end === right.end &&
+    left.revisionRange === right.revisionRange
+  );
 }
 
 function sameSeries(left: SeriesSnapshot, right: SeriesSnapshot): boolean {
   return (
     left.position === right.position &&
+    sameRange(left.range, right.range) &&
     sameMessage(left.message, right.message) &&
     left.commits.length === right.commits.length &&
     left.commits.every((commit, index) => commit.sha === right.commits[index]?.sha)

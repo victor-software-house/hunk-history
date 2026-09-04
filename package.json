@@ -1,7 +1,7 @@
 {
   "name": "hunk-commit-log",
-  "version": "0.1.0",
-  "description": "Review a commit series in Hunk: the commit list beside the diff, the message above it.",
+  "version": "0.2.0",
+  "description": "Review a commit series or inclusive range in Hunk with commit messages and full timestamps.",
   "type": "module",
   "license": "MIT",
   "hunk": {

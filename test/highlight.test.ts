@@ -1,17 +1,25 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { bodyRow, clipRow, messageRows, metaRow, subjectRow } from "../highlight.ts";
+import {
+  bodyRow,
+  clipRow,
+  formatTimestamp,
+  messageRows,
+  metaRow,
+  subjectRow,
+} from "../highlight.ts";
 import type { CommitMessage, SeriesCommit } from "../store.ts";
 
 const COMMIT: SeriesCommit = {
   sha: "8610b105".padEnd(40, "0"),
   abbrev: "8610b105",
   subject: "chore(supply-chain-node): regenerate the open-api spec",
+  baseSha: "7600a004".padEnd(40, "0"),
 };
 
 const MESSAGE: CommitMessage = {
   author: "Ada Lovelace",
-  date: "2026-08-01",
+  timestamp: "2026-08-01T21:04:05+03:00",
   body: "why it changed",
 };
 
@@ -38,7 +46,18 @@ test("a subject with no conventional prefix is all one run", () => {
 });
 
 test("who wrote it is context, not content", () => {
-  assert.deepEqual(tones(metaRow(MESSAGE)), ["muted"]);
+  assert.deepEqual(metaRow(MESSAGE), [
+    { text: " Ada Lovelace  Aug 1, 2026 at 9:04:05 PM UTC+03:00", tone: "muted" },
+  ]);
+});
+
+test("full timestamps preserve their original offset", () => {
+  assert.equal(
+    formatTimestamp("2026-09-01T09:34:50-03:00"),
+    "Sep 1, 2026 at 9:34:50 AM UTC-03:00",
+  );
+  assert.equal(formatTimestamp("2026-09-01T00:00:00Z"), "Sep 1, 2026 at 12:00:00 AM UTC");
+  assert.equal(formatTimestamp("not-a-timestamp"), "not-a-timestamp");
 });
 
 test("body prose reads in the foreground tone", () => {
@@ -86,10 +105,9 @@ test("a row is clipped across its segments, never past the pane", () => {
 
 test("the message is laid out for the pane it has", () => {
   const rows = messageRows(COMMIT, MESSAGE, 60, 8);
-
-  assert.deepEqual(rows.map(text), [
+  assert.deepEqual(rows.map((row) => row.map((segment) => segment.text).join("")), [
     " 8610b105 chore(supply-chain-node): regenerate the open-api…",
-    " Ada Lovelace  2026-08-01",
+    " Ada Lovelace  Aug 1, 2026 at 9:04:05 PM UTC+03:00",
     "",
     " why it changed",
   ]);

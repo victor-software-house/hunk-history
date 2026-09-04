@@ -6,7 +6,9 @@ import {
   configuredRange,
   gitRunner,
   readMessage,
+  resolveRangeReview,
   resolveSeries,
+  rangeTitle,
   seriesTitle,
   type SeriesOptions,
 } from "./series.ts";
@@ -33,12 +35,18 @@ export default function registerCommitLog(hunk: HunkExtensionAPI): void {
     // failure here degrades to the review Hunk built without us.
     try {
       const git = gitRunner(ctx.cwd);
+      const snapshot = seriesSnapshot();
+      const rangeReview = resolveRangeReview(changeset.title, git, snapshot);
+      if (rangeReview !== null) {
+        return { ...changeset, title: rangeTitle(rangeReview.repoName, snapshot) };
+      }
+
       const review = resolveSeries(
         changeset.title,
         git,
         options,
         (message) => hunk.log(message),
-        seriesSnapshot().commits,
+        snapshot.commits,
       );
       if (review === null) {
         publishSeries(EMPTY_SERIES);
@@ -49,6 +57,7 @@ export default function registerCommitLog(hunk: HunkExtensionAPI): void {
       publishSeries({
         commits: review.commits,
         position: review.position,
+        range: null,
         message: head === undefined ? null : readMessage(git, head.sha),
       });
       return { ...changeset, title: seriesTitle(review) };

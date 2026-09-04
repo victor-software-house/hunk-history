@@ -24,13 +24,28 @@ export function clip(line: string, width: number): string {
 }
 
 /** One commit as it reads in a fixed-width column. */
-export function commitRow(commit: SeriesCommit, width: number, current: boolean): string {
-  return clip(` ${current ? CURRENT_MARKER : " "} ${commit.abbrev} ${commit.subject}`, width);
+export function commitRow(
+  commit: SeriesCommit,
+  width: number,
+  state: { active: boolean; selected: boolean },
+): string {
+  const marker = state.active ? CURRENT_MARKER : state.selected ? "│" : " ";
+  return clip(` ${marker} ${commit.abbrev} ${commit.subject}`, width);
 }
 
-/** The pane's own heading: what it lists, and how far through it the reviewer is. */
-export function seriesHeading(position: number | null, total: number, width: number): string {
-  const place = position === null ? `${total}` : `${position + 1}/${total}`;
+/** The pane's own heading: one commit position or the inclusive selected span. */
+export function seriesHeading(
+  position: number | null,
+  total: number,
+  width: number,
+  range?: { start: number; end: number } | null,
+): string {
+  const place =
+    range !== null && range !== undefined
+      ? `${range.start + 1}–${range.end + 1}/${total}`
+      : position === null
+        ? `${total}`
+        : `${position + 1}/${total}`;
   return clip(` Commits ${place}`, width);
 }
 

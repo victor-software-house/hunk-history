@@ -1,10 +1,20 @@
 import { useEffect, useRef, useSyncExternalStore, type ReactNode } from "react";
-import type { ScrollBoxRenderable } from "@opentui/core";
+import {
+  MouseButton,
+  type MouseEvent as TuiMouseEvent,
+  type ScrollBoxRenderable,
+} from "@opentui/core";
 import type { ExtensionPaneProps } from "hunkdiff/extension";
 import { messageRows, type Tone } from "./highlight.ts";
 import { commitRow, seriesHeading } from "./row.ts";
-import { requestCommit } from "./session.ts";
-import { seriesSnapshot, subscribeSeries } from "./store.ts";
+import { requestCommit, requestRange } from "./session.ts";
+import {
+  isSelectedIndex,
+  publishRange,
+  selectedRange,
+  seriesSnapshot,
+  subscribeSeries,
+} from "./store.ts";
 
 /** Row ids are what `scrollChildIntoView` addresses, so they must be stable. */
 function rowId(index: number): string {
@@ -20,7 +30,8 @@ function rowId(index: number): string {
  * reading the branch forwards.
  */
 export function CommitLogPane({ actions, width, height, theme }: ExtensionPaneProps): ReactNode {
-  const { commits, position } = useSyncExternalStore(subscribeSeries, seriesSnapshot);
+  const snapshot = useSyncExternalStore(subscribeSeries, seriesSnapshot);
+  const { commits, position, range } = snapshot;
   const scroll = useRef<ScrollBoxRenderable | null>(null);
 
   useEffect(() => {
@@ -40,7 +51,7 @@ export function CommitLogPane({ actions, width, height, theme }: ExtensionPanePr
       }}
     >
       <text fg={theme.accent} bg={theme.panel}>
-        {seriesHeading(position, commits.length, width)}
+        {seriesHeading(position, commits.length, width, range)}
       </text>
       <scrollbox
         ref={scroll}
@@ -54,19 +65,40 @@ export function CommitLogPane({ actions, width, height, theme }: ExtensionPanePr
         verticalScrollbarOptions={{ visible: false }}
         horizontalScrollbarOptions={{ visible: false }}
       >
-        {commits.map((commit, index) => (
-          <text
-            key={commit.sha}
-            id={rowId(index)}
-            fg={index === position ? theme.text : theme.muted}
-            bg={index === position ? theme.selectedHunk : theme.panel}
-            onMouseDown={
-              index === position ? undefined : () => requestCommit(commit.sha, actions.notify)
-            }
-          >
-            {commitRow(commit, width, index === position)}
-          </text>
-        ))}
+        {commits.map((commit, index) => {
+          const active = index === position;
+          const selected = isSelectedIndex(snapshot, index);
+          return (
+            <text
+              key={commit.sha}
+              id={rowId(index)}
+              fg={selected ? theme.text : theme.muted}
+              bg={selected ? theme.selectedHunk : theme.panel}
+              onMouseDown={(event: TuiMouseEvent) => {
+                if (event.button !== MouseButton.LEFT) {
+                  return;
+                }
+                event.stopPropagation();
+
+                if (event.modifiers.shift) {
+                  const nextRange = selectedRange(snapshot, index);
+                  if (nextRange !== null) {
+                    requestRange(nextRange.revisionRange, actions.notify, () =>
+                      publishRange(nextRange),
+                    );
+                    return;
+                  }
+                }
+
+                if (range !== null || !active) {
+                  requestCommit(commit.sha, actions.notify);
+                }
+              }}
+            >
+              {commitRow(commit, width, { active, selected })}
+            </text>
+          );
+        })}
       </scrollbox>
     </box>
   );

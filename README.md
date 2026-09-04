@@ -1,8 +1,13 @@
 # hunk-commit-log
 
-Review a branch one commit at a time in [Hunk](https://hunk.dev): the commit
-series in a pane beside the diff, the commit message above it, and keys to step
-between commits without leaving the window.
+Review a branch one commit at a time or as an inclusive commit range in
+[Hunk](https://hunk.dev): the commit series in a pane beside the diff, the
+commit message above it, and keys to step between commits without leaving the
+window.
+
+This maintained fork adds inclusive Shift-click range review and full
+human-readable author timestamps to
+[Sadick Mwakio's original extension](https://github.com/sadick254/hunk-commit-log).
 
 Hunk builds a revision review with `git show --format=`, which suppresses the
 commit header, so a `hunk show` review says what changed and never what its
@@ -21,18 +26,22 @@ https://github.com/user-attachments/assets/8bc8ff58-d154-4f9f-8a2c-10256a051cc0
   feat(session): load a clicked commit into the live review`. The position also
   reaches `hunk session list`, so a window says which commit it holds.
 - **A commit list on the left**, oldest at the top, the reviewed commit marked
-  with `▸`. Click any row to load that commit into the same window.
-- **The commit message on top**: subject, author, date, and the body wrapped to
-  the pane. A body taller than the pane reports how many lines it held back.
+  with `▸`. Click any row to load that commit into the same window. Shift-click
+  another row to select every displayed commit between the anchor and that row
+  and review their inclusive net diff. A plain click returns to one commit.
+- **The commit message on top**: subject, author, full author timestamp with its
+  original UTC offset, and the body wrapped to the pane. A body taller than the
+  pane reports how many lines it held back.
 - **The message toned by what each part is**: the sha recedes, a Conventional
   Commits type leads, prose reads in the foreground, identifiers in backticks
   are picked out, and trailers and indented blocks recede. The tones name theme
   roles rather than colours, so they follow whatever theme is active.
 - **`n` and `p`** to step to the next and previous commit in the series.
 
-Every surface is inert outside a single-commit review: during `hunk diff`, a
-stash review, or a patch review the panes stay closed, the keys do nothing, and
-the review title is Hunk's own.
+The extension initializes from a single-commit review and keeps the commit list
+open for ranges selected from that review. Unrelated `hunk diff`, stash, and
+patch reviews remain inert: the panes stay closed, the keys do nothing, and the
+review title is Hunk's own.
 
 ## Install
 
@@ -49,11 +58,11 @@ Keep it, by naming the folder in `~/.config/hunk/config.toml`:
 paths = ["/path/to/hunk-commit-log"]
 ```
 
-Or install it from a git repository, which clones into
-`~/.config/hunk/extensions/installed/<repo-name>/`:
+Or install this maintained fork, which clones into
+`~/.config/hunk/extensions/installed/hunk-commit-log/`:
 
 ```sh
-hunk extension install <owner>/hunk-commit-log
+hunk extension install victor-software-house/hunk-commit-log
 ```
 
 Keep the repository named `hunk-commit-log`. The folder name becomes the
@@ -134,9 +143,17 @@ stopped on rather than every commit you passed through.
 
 ## How it works
 
+- **A Shift-click range is inclusive.** The extension compares the first
+  selected commit's parent (or Git's empty tree for a root commit) with the
+  newest selected commit. The result is Git's net tree diff for the selected
+  span, not a concatenation of each commit's patch.
+- **The range anchor is stable.** The initially reviewed commit or last plain
+  click is the anchor. Further Shift-clicks move the other endpoint; a plain
+  click collapses the range back to that commit.
 - **The reviewed ref comes out of the review title.** No extension API reports
-  it, and Hunk's git backend titles a revision review `<repo> show <ref>`. A
-  title that does not match that shape is a review this extension leaves alone.
+  it, and Hunk's Git backend titles a revision review `<repo> show <ref>` and a
+  range review `<repo> <range>`. The extension recognizes only single commits
+  and the concrete range it requested itself; every other title is left alone.
 - **The series is held, not recomputed.** Stepping keeps the series it started
   with and moves the position; only opening a commit outside it rebuilds it.
   Recomputing from each newly loaded commit would report `N/N` at every stop.
@@ -148,6 +165,9 @@ stopped on rather than every commit you passed through.
 
 ## Limits
 
+- The commit list follows `git rev-list` order. A selected span across merge
+  topology is still a net diff between its endpoint trees; highlighted rows do
+  not mean Hunk concatenated those commits' individual patches.
 - The commit list is a side pane, and Hunk drops a side pane that would squeeze
   the diff below its own minimum width. On a terminal too narrow for both, the
   review keeps its width and the list disappears until the window is wider. It

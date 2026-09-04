@@ -29,6 +29,23 @@ const BULLET = /^(\s*[-*]\s)(.*)$/;
 const INDENTED = /^(?: {4,}|\t)/;
 /** Inline code, which a commit body uses for identifiers and paths. */
 const CODE_SPAN = /`[^`]+`/g;
+/** Git's `%aI` strict ISO timestamp. */
+const GIT_TIMESTAMP =
+  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(Z|[+-]\d{2}:\d{2})$/;
+const MONTHS = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+] as const;
 
 /** Split one run into code spans and everything between them. */
 function withCodeSpans(text: string, tone: Tone): Segment[] {
@@ -66,9 +83,30 @@ export function subjectRow(commit: SeriesCommit): Row {
   ];
 }
 
+/** Format a strict Git timestamp without converting away its original offset. */
+export function formatTimestamp(timestamp: string): string {
+  const match = GIT_TIMESTAMP.exec(timestamp);
+  if (match === null) {
+    return timestamp;
+  }
+
+  const [, year, monthText, dayText, hourText, minute, second, offset] = match;
+  const month = Number(monthText);
+  const day = Number(dayText);
+  const hour = Number(hourText);
+  if (!year || !MONTHS[month - 1] || day < 1 || day > 31 || hour > 23) {
+    return timestamp;
+  }
+
+  const period = hour < 12 ? "AM" : "PM";
+  const displayHour = hour % 12 || 12;
+  const zone = offset === "Z" ? "UTC" : `UTC${offset}`;
+  return `${MONTHS[month - 1]} ${day}, ${year} at ${displayHour}:${minute}:${second} ${period} ${zone}`;
+}
+
 /** Who wrote it and when, which is context rather than content. */
 export function metaRow(message: CommitMessage): Row {
-  return [{ text: ` ${message.author}  ${message.date}`, tone: "muted" }];
+  return [{ text: ` ${message.author}  ${formatTimestamp(message.timestamp)}`, tone: "muted" }];
 }
 
 /**

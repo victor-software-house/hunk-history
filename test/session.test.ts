@@ -3,8 +3,10 @@ import { beforeEach, test } from "node:test";
 import {
   findSessionId,
   loadCommit,
+  loadRange,
   pendingCommit,
   requestCommit,
+  requestRange,
   resetPending,
   resetSessionId,
   type CommandRunner,
@@ -110,6 +112,19 @@ test("loading a commit reloads this session with a revision show", async () => {
   ]);
 });
 
+test("loading a selected range reloads this session with a concrete diff", async () => {
+  const cli = daemon();
+  const range = `${"1".repeat(40)}..${"3".repeat(40)}`;
+
+  const problem = await loadRange(range, { run: cli.run, pid: OWN_PID });
+
+  assert.equal(problem, null);
+  assert.deepEqual(cli.calls, [
+    ["session", "list", "--json"],
+    ["session", "reload", SESSION_ID, "--", "diff", range],
+  ]);
+});
+
 test("the session id is resolved once and reused", async () => {
   const cli = daemon();
 
@@ -180,6 +195,33 @@ test("a burst of steps loads where the reviewer stopped, not every stop", async 
     reloadedShas(cli.calls),
     ["a".repeat(40), "c".repeat(40)],
     "b was passed through, never stopped on",
+  );
+});
+
+test("a range request coalesces behind an in-flight commit request", async () => {
+  const cli = deferredCli();
+  const deps = { run: cli.run, pid: OWN_PID };
+  const range = `${"1".repeat(40)}..${"3".repeat(40)}`;
+  const started: string[] = [];
+
+  requestCommit("a".repeat(40), () => {}, deps);
+  await settle();
+  requestRange(range, () => {}, () => started.push(range), deps);
+  assert.deepEqual(started, [], "queued selection stays hidden until its reload starts");
+
+  cli.finish();
+  await settle();
+  await settle();
+  assert.deepEqual(started, [range]);
+  cli.finish();
+  await settle();
+
+  assert.deepEqual(
+    cli.calls.filter((call) => call[1] === "reload").map((call) => call.slice(4)),
+    [
+      ["show", "a".repeat(40)],
+      ["diff", range],
+    ],
   );
 });
 
