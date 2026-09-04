@@ -50,6 +50,8 @@ test("a commit row never exceeds the pane width", () => {
 test("the heading counts one commit or an inclusive range", () => {
   assert.equal(seriesHeading(2, 8, 40), " Commits 3/8");
   assert.equal(seriesHeading(4, 8, 40, { start: 1, end: 4 }), " Commits 2–5/8");
+  assert.equal(seriesHeading(2, 8, 40, null, true), " Range 3/8");
+  assert.equal(seriesHeading(4, 8, 40, { start: 1, end: 4 }, true), " Range 2–5/8");
   assert.equal(seriesHeading(null, 8, 40), " Commits 8");
   assert.ok(seriesHeading(2, 8, 6).length <= 6);
 });

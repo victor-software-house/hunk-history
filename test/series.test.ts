@@ -306,6 +306,7 @@ test("an extension-initiated range keeps the held series visible", () => {
   const snapshot: SeriesSnapshot = {
     commits: HISTORY,
     position: 3,
+    rangeAnchor: 1,
     range: {
       anchor: 1,
       endpoint: 3,

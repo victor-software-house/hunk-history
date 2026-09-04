@@ -9,6 +9,7 @@ import { messageRows, type Tone } from "./highlight.ts";
 import { commitRow, seriesHeading } from "./row.ts";
 import { requestCommit, requestRange } from "./session.ts";
 import {
+  cancelRangeSelection,
   isSelectedIndex,
   publishRange,
   selectedRange,
@@ -31,7 +32,8 @@ function rowId(index: number): string {
  */
 export function CommitLogPane({ actions, width, height, theme }: ExtensionPaneProps): ReactNode {
   const snapshot = useSyncExternalStore(subscribeSeries, seriesSnapshot);
-  const { commits, position, range } = snapshot;
+  const { commits, position, range, rangeAnchor } = snapshot;
+  const rangeMode = rangeAnchor !== null;
   const scroll = useRef<ScrollBoxRenderable | null>(null);
 
   useEffect(() => {
@@ -51,7 +53,7 @@ export function CommitLogPane({ actions, width, height, theme }: ExtensionPanePr
       }}
     >
       <text fg={theme.accent} bg={theme.panel}>
-        {seriesHeading(position, commits.length, width, range)}
+        {seriesHeading(position, commits.length, width, range, rangeMode)}
       </text>
       <scrollbox
         ref={scroll}
@@ -73,14 +75,14 @@ export function CommitLogPane({ actions, width, height, theme }: ExtensionPanePr
               key={commit.sha}
               id={rowId(index)}
               fg={selected ? theme.text : theme.muted}
-              bg={selected ? theme.selectedHunk : theme.panel}
+              bg={selected ? (rangeMode ? theme.accentMuted : theme.selectedHunk) : theme.panel}
               onMouseDown={(event: TuiMouseEvent) => {
                 if (event.button !== MouseButton.LEFT) {
                   return;
                 }
                 event.stopPropagation();
 
-                if (event.modifiers.shift) {
+                if (rangeMode) {
                   const nextRange = selectedRange(snapshot, index);
                   if (nextRange !== null) {
                     requestRange(nextRange.revisionRange, actions.notify, () =>
@@ -88,9 +90,15 @@ export function CommitLogPane({ actions, width, height, theme }: ExtensionPanePr
                     );
                     return;
                   }
+
+                  cancelRangeSelection();
+                  if (range !== null) {
+                    requestCommit(commit.sha, actions.notify);
+                  }
+                  return;
                 }
 
-                if (range !== null || !active) {
+                if (!active) {
                   requestCommit(commit.sha, actions.notify);
                 }
               }}

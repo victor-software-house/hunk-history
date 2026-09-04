@@ -39,6 +39,7 @@ export function seriesHeading(
   total: number,
   width: number,
   range?: { start: number; end: number } | null,
+  rangeMode = false,
 ): string {
   const place =
     range !== null && range !== undefined
@@ -46,7 +47,7 @@ export function seriesHeading(
       : position === null
         ? `${total}`
         : `${position + 1}/${total}`;
-  return clip(` Commits ${place}`, width);
+  return clip(` ${rangeMode ? "Range" : "Commits"} ${place}`, width);
 }
 
 /**

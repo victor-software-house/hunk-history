@@ -37,6 +37,8 @@ export interface SeriesSnapshot {
   readonly commits: readonly SeriesCommit[];
   /** Index into `commits`, or null when the review is not a commit-backed review. */
   readonly position: number | null;
+  /** Stable anchor while `v` range mode is active, including before a range exists. */
+  readonly rangeAnchor: number | null;
   readonly range: SeriesRange | null;
   readonly message: CommitMessage | null;
 }
@@ -44,6 +46,7 @@ export interface SeriesSnapshot {
 export const EMPTY_SERIES: SeriesSnapshot = {
   commits: [],
   position: null,
+  rangeAnchor: null,
   range: null,
   message: null,
 };
@@ -146,13 +149,40 @@ export function neighbour(
   return snapshot.commits[base + delta] ?? null;
 }
 
-/** Build the inclusive range from the current anchor to one clicked endpoint. */
+/** Enter range mode at the commit the review currently identifies. */
+export function beginRangeSelection(): void {
+  if (snapshot.position === null) {
+    return;
+  }
+
+  publishSeries({
+    ...snapshot,
+    rangeAnchor: snapshot.position,
+    range: null,
+  });
+}
+
+/** Leave range mode without replacing the currently loaded single-commit review. */
+export function cancelRangeSelection(): void {
+  publishSeries({
+    ...snapshot,
+    rangeAnchor: null,
+    range: null,
+  });
+}
+
+/** Build the inclusive range from the armed anchor to one chosen endpoint. */
 export function selectedRange(snapshot: SeriesSnapshot, endpoint: number): SeriesRange | null {
-  if (snapshot.position === null || endpoint < 0 || endpoint >= snapshot.commits.length) {
+  if (
+    snapshot.position === null ||
+    snapshot.rangeAnchor === null ||
+    endpoint < 0 ||
+    endpoint >= snapshot.commits.length
+  ) {
     return null;
   }
 
-  const anchor = snapshot.range?.anchor ?? snapshot.position;
+  const anchor = snapshot.rangeAnchor;
   if (anchor === endpoint) {
     return null;
   }
@@ -186,6 +216,7 @@ export function publishRange(range: SeriesRange): void {
   publishSeries({
     ...snapshot,
     position: range.endpoint,
+    rangeAnchor: range.anchor,
     range,
     message: null,
   });
@@ -221,6 +252,7 @@ function sameRange(left: SeriesRange | null, right: SeriesRange | null): boolean
 function sameSeries(left: SeriesSnapshot, right: SeriesSnapshot): boolean {
   return (
     left.position === right.position &&
+    left.rangeAnchor === right.rangeAnchor &&
     sameRange(left.range, right.range) &&
     sameMessage(left.message, right.message) &&
     left.commits.length === right.commits.length &&

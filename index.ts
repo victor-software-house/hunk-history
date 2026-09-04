@@ -12,15 +12,19 @@ import {
   seriesTitle,
   type SeriesOptions,
 } from "./series.ts";
-import { pendingCommit, requestCommit } from "./session.ts";
+import { pendingCommit, requestCommit, requestRange } from "./session.ts";
 import {
+  beginRangeSelection,
+  cancelRangeSelection,
   COLLAPSED_MESSAGE_PANE,
   EMPTY_SERIES,
   EXPANDED_RUNGS,
   expandedPane,
   messagePanes,
   neighbour,
+  publishRange,
   publishSeries,
+  selectedRange,
   seriesSnapshot,
 } from "./store.ts";
 
@@ -57,6 +61,7 @@ export default function registerCommitLog(hunk: HunkExtensionAPI): void {
       publishSeries({
         commits: review.commits,
         position: review.position,
+        rangeAnchor: null,
         range: null,
         message: head === undefined ? null : readMessage(git, head.sha),
       });
@@ -147,6 +152,29 @@ export default function registerCommitLog(hunk: HunkExtensionAPI): void {
     },
   );
 
+  hunk.registerCommand(
+    { id: "range", title: "Start or finish commit range selection", key: "v" },
+    (ctx) => {
+      const snapshot = seriesSnapshot();
+      if (snapshot.position === null) {
+        return;
+      }
+
+      if (snapshot.rangeAnchor === null) {
+        beginRangeSelection();
+        ctx.notify("range selection enabled — click a commit or use n/p", "info");
+        return;
+      }
+
+      const active = snapshot.commits[snapshot.position];
+      cancelRangeSelection();
+      if (snapshot.range !== null && active) {
+        requestCommit(active.sha, ctx.notify);
+      }
+      ctx.notify("range selection disabled", "info");
+    },
+  );
+
   // A step to another commit brings a message of another length, so the rung
   // that fit the last one is the wrong pane to leave open.
   hunk.on("changeset_loaded", (_event, ctx) => {
@@ -165,6 +193,22 @@ export default function registerCommitLog(hunk: HunkExtensionAPI): void {
       const snapshot = seriesSnapshot();
       if (snapshot.position === null) {
         return;
+      }
+
+      if (snapshot.rangeAnchor !== null) {
+        const endpoint = snapshot.position + step.delta;
+        const range = selectedRange(snapshot, endpoint);
+        if (range !== null) {
+          requestRange(range.revisionRange, ctx.notify, () => publishRange(range));
+          return;
+        }
+
+        const anchor = snapshot.commits[snapshot.rangeAnchor];
+        if (endpoint === snapshot.rangeAnchor && anchor) {
+          cancelRangeSelection();
+          requestCommit(anchor.sha, ctx.notify);
+          return;
+        }
       }
 
       const target = neighbour(snapshot, step.delta, pendingCommit());
