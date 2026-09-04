@@ -47,7 +47,8 @@ export function seriesHeading(
       : position === null
         ? `${total}`
         : `${position + 1}/${total}`;
-  return clip(` ${rangeMode ? "Range" : "Commits"} ${place}`, width);
+  const controls = rangeMode ? "  click/n/p  v exit" : "";
+  return clip(` ${rangeMode ? "Range" : "Commits"} ${place}${controls}`, width);
 }
 
 /**

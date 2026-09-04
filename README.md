@@ -27,9 +27,10 @@ https://github.com/user-attachments/assets/8bc8ff58-d154-4f9f-8a2c-10256a051cc0
   reaches `hunk session list`, so a window says which commit it holds.
 - **A commit list on the left**, oldest at the top, the reviewed commit marked
   with `▸`. Click any row to load that commit into the same window. Press `v`
-  to enter range mode: the heading changes from `Commits` to `Range`, selected
-  rows switch to the accent color, and a plain click or `n`/`p` chooses the
-  other endpoint. Press `v` again to collapse back to the active commit.
+  to enter range mode: the heading changes from `Commits` to `Range` and shows
+  the available controls, selected rows switch to the accent color, and a plain
+  click or `n`/`p` chooses the other endpoint. Press `v` again to collapse back
+  to the active commit.
 - **The commit message on top**: subject, author, full author timestamp with its
   original UTC offset, and the body wrapped to the pane. A body taller than the
   pane reports how many lines it held back.
@@ -146,9 +147,9 @@ stopped on rather than every commit you passed through.
 ## How it works
 
 - **Range mode is explicit and visible.** Press `v` to anchor the current
-  commit. The heading changes from `Commits` to `Range` immediately and the
-  anchor uses the accent selection color. A plain click or `n`/`p` moves the
-  endpoint; pressing `v` again exits range mode at the active endpoint.
+  commit. The heading changes immediately to `Range … click/n/p v exit`, and
+  the anchor uses the accent selection color. A plain click or `n`/`p` moves
+  the endpoint; pressing `v` again exits range mode at the active endpoint.
 - **A selected range is inclusive.** The extension compares the first
   selected commit's parent (or Git's empty tree for a root commit) with the
   newest selected commit. The result is Git's net tree diff for the selected

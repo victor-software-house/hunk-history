@@ -153,7 +153,7 @@ export default function registerCommitLog(hunk: HunkExtensionAPI): void {
   );
 
   hunk.registerCommand(
-    { id: "range", title: "Start or finish commit range selection", key: "v" },
+    { id: "range", title: "Toggle commit range selection", key: "v" },
     (ctx) => {
       const snapshot = seriesSnapshot();
       if (snapshot.position === null) {
@@ -162,7 +162,7 @@ export default function registerCommitLog(hunk: HunkExtensionAPI): void {
 
       if (snapshot.rangeAnchor === null) {
         beginRangeSelection();
-        ctx.notify("range selection enabled — click a commit or use n/p", "info");
+        ctx.notify("range mode — click a commit or use n/p; v exits", "info");
         return;
       }
 
