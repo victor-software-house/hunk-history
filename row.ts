@@ -39,7 +39,7 @@ export function seriesHeading(
   total: number,
   width: number,
   range?: { start: number; end: number } | null,
-  rangeMode = false,
+  dragging = false,
 ): string {
   const place =
     range !== null && range !== undefined
@@ -47,8 +47,9 @@ export function seriesHeading(
       : position === null
         ? `${total}`
         : `${position + 1}/${total}`;
-  const controls = rangeMode ? "  click/n/p  v exit" : "";
-  return clip(` ${rangeMode ? "Range" : "Commits"} ${place}${controls}`, width);
+  const label = dragging ? "Selecting" : range ? "Selected" : "Commits";
+  const hint = !dragging && !range ? "  drag to select" : "";
+  return clip(` ${label} ${place}${hint}`, width);
 }
 
 /**

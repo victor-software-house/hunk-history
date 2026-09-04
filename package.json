@@ -1,6 +1,6 @@
 {
-  "name": "hunk-commit-log",
-  "version": "0.2.1",
+  "name": "hunk-history",
+  "version": "0.0.1",
   "description": "Review a commit series or inclusive range in Hunk with commit messages and full timestamps.",
   "type": "module",
   "license": "MIT",

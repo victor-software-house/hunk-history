@@ -1,13 +1,13 @@
-# hunk-commit-log
+# hunk-history
 
-Review a branch one commit at a time or as an inclusive commit range in
+Review Git history one commit at a time or select an inclusive commit range in
 [Hunk](https://hunk.dev): the commit series in a pane beside the diff, the
 commit message above it, and keys to step between commits without leaving the
 window.
 
-This maintained fork adds inclusive, terminal-safe range review and full
-human-readable author timestamps to
-[Sadick Mwakio's original extension](https://github.com/sadick254/hunk-commit-log).
+This project builds on
+[Sadick Mwakio's hunk-commit-log](https://github.com/sadick254/hunk-commit-log)
+as prior art, with direct range selection and full human-readable timestamps.
 
 Hunk builds a revision review with `git show --format=`, which suppresses the
 commit header, so a `hunk show` review says what changed and never what its
@@ -22,15 +22,14 @@ https://github.com/user-attachments/assets/8bc8ff58-d154-4f9f-8a2c-10256a051cc0
 
 ## What it adds
 
-- **The reviewed commit in the review title**: `hunk-commit-log 3/11 e0ced7b
+- **The reviewed commit in the review title**: `hunk-history 3/11 e0ced7b
   feat(session): load a clicked commit into the live review`. The position also
   reaches `hunk session list`, so a window says which commit it holds.
 - **A commit list on the left**, oldest at the top, the reviewed commit marked
-  with `▸`. Click any row to load that commit into the same window. Press `v`
-  to enter range mode: the heading changes from `Commits` to `Range` and shows
-  the available controls, selected rows switch to the accent color, and a plain
-  click or `n`/`p` chooses the other endpoint. Press `v` again to collapse back
-  to the active commit.
+  with `▸`. Click a row to review that commit. Drag directly across commit rows
+  to preview an inclusive selection in the accent color; release to load its
+  net diff. Every drag starts wherever the pointer starts, with no fixed pivot,
+  mode, modifier, or extra confirmation.
 - **The commit message on top**: subject, author, full author timestamp with its
   original UTC offset, and the body wrapped to the pane. A body taller than the
   pane reports how many lines it held back.
@@ -50,31 +49,30 @@ review title is Hunk's own.
 Try it against one review, with nothing installed:
 
 ```sh
-hunk show HEAD --extension /path/to/hunk-commit-log
+hunk show HEAD --extension /path/to/hunk-history
 ```
 
 Keep it, by naming the folder in `~/.config/hunk/config.toml`:
 
 ```toml
 [extensions]
-paths = ["/path/to/hunk-commit-log"]
+paths = ["/path/to/hunk-history"]
 ```
 
-Or install this maintained fork, which clones into
-`~/.config/hunk/extensions/installed/hunk-commit-log/`:
+Or install it from GitHub, which clones into
+`~/.config/hunk/extensions/installed/hunk-history/`:
 
 ```sh
-hunk extension install victor-software-house/hunk-commit-log
+hunk extension install victor-software-house/hunk-history
 ```
 
-Keep the repository named `hunk-commit-log`. The folder name becomes the
-extension id, and the id is what namespaces the command ids, the pane keys, and
-the config table below; a different name silently renames all of them.
+The folder name is the extension id, so its config and command namespaces are
+`hunk-history`.
 
 ## Configuration
 
 ```toml
-[extension.hunk-commit-log]
+[extension.hunk-history]
 range = "main..HEAD"   # the series to review; default: your unpushed commits
 limit = 20             # most commits to gather when no range is set; max 500
 messageRows = 8        # rows the message pane starts with; 3 to 60
@@ -118,22 +116,21 @@ leading dash reads as an option.
 
 ## Keys
 
-| Key | Command id                   | Does                              |
-| --- | ---------------------------- | --------------------------------- |
-| `v` | `hunk-commit-log.range`      | Start or finish range selection   |
-| `n` | `hunk-commit-log.next`       | Next commit or range endpoint     |
-| `p` | `hunk-commit-log.previous`   | Previous commit or range endpoint |
-| `h` | `hunk-commit-log.toggle`     | Show or hide the commit list      |
-| `i` | `hunk-commit-log.message`    | Show or hide the commit message   |
-| `I` | `hunk-commit-log.expand`     | Fit the pane to the message, or collapse it |
+| Key | Command id              | Does                          |
+| --- | ----------------------- | ----------------------------- |
+| `n` | `hunk-history.next`     | Next commit in the series     |
+| `p` | `hunk-history.previous` | Previous commit in the series |
+| `h` | `hunk-history.toggle`   | Show or hide the commit list  |
+| `i` | `hunk-history.message`  | Show or hide the message      |
+| `I` | `hunk-history.expand`   | Fit or collapse the message   |
 
 Remap them by command id in the `[keybindings]` table of your user config, which
 is the only place Hunk reads keybindings from:
 
 ```toml
 [keybindings]
-"hunk-commit-log.next" = "ctrl+n"
-"hunk-commit-log.previous" = false   # unbind
+"hunk-history.next" = "ctrl+n"
+"hunk-history.previous" = false   # unbind
 ```
 
 `]` and `[` would read better than `n` and `p`, and they are already
@@ -146,18 +143,20 @@ stopped on rather than every commit you passed through.
 
 ## How it works
 
-- **Range mode is explicit and visible.** Press `v` to anchor the current
-  commit. The heading changes immediately to `Range … click/n/p v exit`, and
-  the anchor uses the accent selection color. A plain click or `n`/`p` moves
-  the endpoint; pressing `v` again exits range mode at the active endpoint.
-- **A selected range is inclusive.** The extension compares the first
-  selected commit's parent (or Git's empty tree for a root commit) with the
-  newest selected commit. The result is Git's net tree diff for the selected
-  span, not a concatenation of each commit's patch.
-- **No mouse modifier is required.** Terminals commonly reserve Shift-click
-  for native text selection, so Hunk cannot reliably receive that gesture.
-- **The range anchor is stable.** Pressing `v` anchors the commit currently on
-  screen. Endpoint clicks and `n`/`p` keep that anchor until `v` exits the mode.
+- **Selection is direct manipulation.** Click a commit to open it. Press and
+  drag from any commit to any other commit to preview the contiguous selection;
+  release to load it. The heading changes from `Commits … drag to select` to
+  `Selecting …` during the gesture and `Selected …` after the range loads.
+- **Every drag has a fresh pivot.** Nothing remains armed after release. Start
+  the next drag at whichever boundary is natural, or click once to return to a
+  single commit.
+- **A selected range is inclusive.** The extension compares the first selected
+  commit's parent (or Git's empty tree for a root commit) with the newest
+  selected commit. The result is Git's net tree diff for the selected span, not
+  a concatenation of each commit's patch.
+- **No mouse modifier is required.** Terminals commonly reserve Shift-click for
+  native text selection, so the interaction uses an ordinary drag that Hunk
+  receives reliably.
 - **The reviewed ref comes out of the review title.** No extension API reports
   it, and Hunk's Git backend titles a revision review `<repo> show <ref>` and a
   range review `<repo> <range>`. The extension recognizes only single commits
@@ -165,11 +164,11 @@ stopped on rather than every commit you passed through.
 - **The series is held, not recomputed.** Stepping keeps the series it started
   with and moves the position; only opening a commit outside it rebuilds it.
   Recomputing from each newly loaded commit would report `N/N` at every stop.
-- **Loading a commit goes through the session daemon.** The extension API can
-  navigate inside a loaded changeset but cannot load a different one, so a click
-  or a step runs `hunk session reload <id> -- show <sha>` against this window,
-  found by its own process id rather than by `--repo`, which would settle for
-  any window open on the same checkout.
+- **Loading a review goes through the session daemon.** A click runs
+  `hunk session reload <id> -- show <sha>` and a completed drag runs
+  `hunk session reload <id> -- diff <range>` against this exact window, found
+  by its process id rather than `--repo`, which could settle for another window
+  on the same checkout.
 
 ## Limits
 

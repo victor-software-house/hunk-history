@@ -123,7 +123,7 @@ function readCommits(git: GitRunner, shas: string): SeriesCommit[] {
 /**
  * A range from configuration, or null when there is none to trust.
  *
- * Repository config can set `[extension.hunk-commit-log]`, so this string is
+ * Repository config can set `[extension.hunk-history]`, so this string is
  * untrusted input that ends up in a git argument list. No shell is involved,
  * which leaves one way to misread it: a leading dash would make git treat the
  * value as an option rather than a range.
