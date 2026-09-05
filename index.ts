@@ -18,7 +18,7 @@ import { showSidebar, toggleFiles } from "./sidebar.ts";
 import { historyInstructions } from "./cli.ts";
 
 export default function registerCommitLog(hunk: HunkExtensionAPI): void {
-  hunk.registerCliCommand({ name: "history", summary: "Read history extension instructions", usage: "instructions" }, historyInstructions);
+  hunk.registerCliCommand({ name: "history", summary: "Read history extension instructions", usage: "<instructions|help>" }, historyInstructions);
   hunk.events.on("hunk-history:files", (_event, ctx) => {
     cancelHistoryGesture();
     showSidebar(ctx.panes, "files");

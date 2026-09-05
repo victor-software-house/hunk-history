@@ -18,8 +18,9 @@
 - Update the official Hunk host, SDK and all development dependencies (including
   TypeScript) to latest stable. Use the official upstream, never the retired local
   Hunk fork. See [the capability audit](extension-capabilities.md).
-- **Version remains 0.0.2 pending a separate release action.** Live approval has been
-  granted; it is no longer an outstanding interaction gate.
+- The operator approved release and installation of **0.0.3**, including the
+  live-approved interaction and runtime instruction discovery. Existing review
+  windows must not be closed or their notes discarded as part of installation.
 
 ## Implementation
 

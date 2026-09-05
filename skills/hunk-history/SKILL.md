@@ -100,6 +100,6 @@ Read [the capability audit](https://github.com/victor-software-house/hunk-histor
 agent integration, note monitoring, or review control. It distinguishes published
 API 16 from unreleased main API 18 and records the exact official source inspected.
 
-The Git-tagged 0.0.2 release predates live-history changes. The operator has approved
-the live-tested direction; source remains version 0.0.2 pending a separate release.
-Check the loaded source before assuming the installed extension includes these changes.
+Version 0.0.3 includes live history and this instructions command. Earlier 0.0.2
+installations do not. Check `hunk extension list` and command availability; restart
+an existing Hunk window to load updated extension code, preserving notes first.

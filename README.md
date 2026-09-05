@@ -5,8 +5,8 @@ between staged and unstaged changes in [Hunk](https://hunk.dev). Built on
 [Sadick Mwakio's hunk-commit-log](https://github.com/sadick254/hunk-commit-log).
 
 Developed and verified against Hunk **0.21.1** and its published extension API **16**,
-with Git on PATH. The live-history direction has been **live-tested and approved**.
-The extension version remains **0.0.2** pending a separate release action.
+with Git on PATH. **0.0.3** includes live history, immediate clicks, preserved
+range gestures, and the agent instructions command.
 
 ## Interaction
 
@@ -60,8 +60,8 @@ Configuration is read at extension startup; restart Hunk after editing it.
 
 ## Comparisons and commands
 
-All extension commands appear in Hunk's **Extensions** menu, including unbound
-commands. No additional keyboard bindings are introduced by this trial.
+All UI commands appear in Hunk's **Extensions** menu, including unbound
+commands. The separate CLI tree exposes instructions and help.
 
 | Key | Command id | Action |
 |:--|:--|:--|
@@ -110,8 +110,13 @@ scrolling is introduced.
 Install the approved release:
 
 ```sh
-hunk extension install victor-software-house/hunk-history
+hunk extension install victor-software-house/hunk-history@v0.0.3
 ```
+
+For an existing unpinned installation, run `hunk extension update hunk-history`.
+Restart Hunk after updating to load the new extension code; preserve any review
+notes before closing a window. Confirm `hunk extension list` reports 0.0.3 and
+`hunk history --help` lists the instruction command.
 
 Test this checkout **without replacing the installed release**, from a Git repository:
 
@@ -159,5 +164,4 @@ suite, including full-pane remounts, immediate dispatch, request ordering, scrol
 hover and failures. No new dependencies or test framework are needed.
 
 [Trial plan](docs/live-history-plan.md) · [Interaction decisions](docs/interaction-plan.md).
-The interaction is approved; versioning, publication and installed-extension replacement
-remain separate actions.
+The live-approved interaction and instruction discovery ship together in 0.0.3.

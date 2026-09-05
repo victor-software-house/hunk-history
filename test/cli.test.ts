@@ -23,16 +23,17 @@ test("instructions are the bundled skill verbatim", async () => {
 });
 
 test("help and invalid arguments use the correct stream and exit code", async () => {
-  for (const args of [[], ["--help"], ["-h"]]) {
+  for (const args of [[], ["help"], ["--help"], ["-h"], ["instructions", "--help"], ["instructions", "-h"], ["help", "instructions"]]) {
     const output = await invoke(args);
-    assert.match(output.stdout, /Usage: hunk history instructions/);
+    assert.match(output.stdout, /Usage:\n  hunk history instructions/);
     assert.equal(output.stderr, "");
     assert.deepEqual(output.result, { kind: "exit" });
   }
-  for (const args of [["status"], ["instructions", "extra"]]) {
+  for (const args of [["status"], ["instructions", "extra"], ["help", "unknown"], ["instructions", "--help", "extra"]]) {
     const output = await invoke(args);
     assert.equal(output.stdout, "");
-    assert.match(output.stderr, /Usage:/);
+    assert.match(output.stderr, /Unknown history command:|Unexpected arguments\./);
+    assert.match(output.stderr, /hunk history --help/);
     assert.deepEqual(output.result, { kind: "exit", code: 2 });
   }
 });
