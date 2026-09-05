@@ -93,12 +93,28 @@ Hunk after changing it.
 | `n` | `hunk-history.next` | Next commit |
 | `p` | `hunk-history.previous` | Previous commit |
 | `h` | `hunk-history.toggle` | Switch Files / Commits |
+| `s` (override below) | `hunk-history.files` | Close Commits, toggle Files |
 | `i` | `hunk-history.message` | Toggle commit message |
 | `I` | `hunk-history.expand` | Fit/collapse message |
 | — | `hunk-history.scope` | Show commit review scope |
 
 Remap command ids in the user config's `[keybindings]` table. `[` and `]` already
 belong to Hunk's hunk navigation and are not claimed by this extension.
+
+To make **both `h` and `s` mutually exclusive**, add this to your Hunk user config:
+
+```toml
+[keybindings]
+"hunk.view.toggleFilesPane" = false
+"hunk-history.files" = "s"
+```
+
+Hunk owns `s` by default; an extension cannot override it just by registering the
+same key. This explicit override sends `s` through the same controller as `h`.
+It closes Commits before toggling Files, including in non-commit reviews. Restart
+Hunk after configuring it. Without the extension (for example `--no-extensions`),
+this binding is unavailable; remove the override to restore the built-in shortcut.
+Other explicit host pane commands are not intercepted.
 
 `messageRows` sets the initial message height (3–60 rows). Drag its divider to
 resize it. `I` chooses the smallest available height among 8, 12, 18, 26, 36 and

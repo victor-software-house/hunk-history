@@ -25,7 +25,7 @@ import {
   seriesSnapshot,
 } from "./store.ts";
 import { createElement } from "react";
-import { showSidebar } from "./sidebar.ts";
+import { showSidebar, toggleFiles } from "./sidebar.ts";
 
 export default function registerCommitLog(hunk: HunkExtensionAPI): void {
   hunk.events.on("hunk-history:files", (_event, ctx) => showSidebar(ctx.panes, "files"));
@@ -131,6 +131,10 @@ export default function registerCommitLog(hunk: HunkExtensionAPI): void {
       return;
     }
     showSidebar(ctx.panes, ctx.panes.isOpen("commits") ? "files" : "commits");
+  });
+
+  hunk.registerCommand({ id: "files", title: "Toggle Files exclusively" }, (ctx) => {
+    toggleFiles(ctx.panes);
   });
 
   hunk.registerCommand({ id: "scope", title: "Show commit review scope" }, (ctx) => {

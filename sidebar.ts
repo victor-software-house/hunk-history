@@ -10,3 +10,9 @@ export function showSidebar(panes: ExtensionPaneControls, view: "files" | "commi
     panes.open("hunk:files");
   }
 }
+
+/** Files' shortcut must not bypass the history pane's exclusion rule. */
+export function toggleFiles(panes: ExtensionPaneControls): void {
+  panes.close("commits");
+  panes.toggle("hunk:files");
+}
