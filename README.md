@@ -1,8 +1,13 @@
 # hunk-history
 
 Browse live Git history, review individual commits and inclusive ranges, and switch
-between staged and unstaged changes in [Hunk](https://hunk.dev). Built on
+between staged and unstaged changes in [Hunk](https://hunk.dev). An independent
+extension, originally based on
 [Sadick Mwakio's hunk-commit-log](https://github.com/sadick254/hunk-commit-log).
+
+![Switching Files and History tabs and selecting a file in Hunk](docs/demo/sidebar.gif)
+
+[Still image](docs/demo/files.png) · [Recording source and reproduction](docs/demo/README.md).
 
 Developed and verified against Hunk **0.21.1** and its published extension API **16**,
 with Git on PATH. **0.0.4** includes live history, immediate clicks, preserved
