@@ -1,14 +1,17 @@
 # Sidebar recording
 
 Real Hunk 0.21.1 with hunk-history 0.0.4, reviewing this project's public commit
-`d3ac317`. No synthetic diff or simulated UI. The recording shows tab hover,
-Files/History switching, and native file selection with the half-cell marker.
+`d3ac317`. No synthetic diff or simulated UI. The recording opens directly in Hunk,
+shows tab hover and native file selection, then double-clicks `c1d9a9b` to arm a
+range and selects `c471043` as its earlier endpoint. The applied three-commit range
+is held on screen so the highlight and net diff are readable.
 
 - Recorder: [EVP pointer-v0.19.0-1](https://github.com/victor-software-house/evp/releases/tag/pointer-v0.19.0-1), the prebuilt Apple Silicon binary.
 - Theme: `gruvbox-dark-hard`; terminal background `#1d2021`.
 - Geometry: 110 columns × 30 rows, 18px font, 18px padding, 50 fps.
 - Source: [sidebar.tape](sidebar.tape).
-- Outputs: [animation](sidebar.gif), [Files still](files.png), [History still](history.png).
+- Outputs: [animation](sidebar.gif), [Files](files.png), [History](history.png),
+  [armed endpoint](range-start.png), [applied range](range.png).
 
 ## Reproduce
 
@@ -34,4 +37,6 @@ existing Hunk windows are untouched.
 
 Inspect both stills and play the GIF in a browser before replacing the assets in
 this directory. Confirm the Files click changes the selected file and displayed
-diff—not just the pointer position. Retain the exact tape alongside the output.
+diff—not just the pointer position. Verify `End · Esc` after the double-click,
+then `Applied 33–35/37` and the `c471043…c1d9a9b` comparison after the endpoint
+click. Retain the exact tape alongside the output.

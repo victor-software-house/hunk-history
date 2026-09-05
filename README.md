@@ -5,9 +5,14 @@ between staged and unstaged changes in [Hunk](https://hunk.dev). An independent
 extension, originally based on
 [Sadick Mwakio's hunk-commit-log](https://github.com/sadick254/hunk-commit-log).
 
-![Switching Files and History tabs and selecting a file in Hunk](docs/demo/sidebar.gif)
+## Preview
 
-[Still image](docs/demo/files.png) · [Recording source and reproduction](docs/demo/README.md).
+**Switch tabs → select a file → double-click a commit → click the range endpoint.**
+The real Hunk session shows the armed state, then the applied three-commit diff.
+
+![Live Hunk walkthrough: tab switching, file navigation, and double-click range selection](docs/demo/sidebar.gif)
+
+[Full-size animation](https://raw.githubusercontent.com/victor-software-house/hunk-history/main/docs/demo/sidebar.gif) · [Applied range](docs/demo/range.png) · [Recording source](docs/demo/README.md).
 
 Developed and verified against Hunk **0.21.1** and its published extension API **16**,
 with Git on PATH. **0.0.4** includes live history, immediate clicks, preserved
