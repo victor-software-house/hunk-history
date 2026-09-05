@@ -9,8 +9,9 @@
   rejected in the real host. Mocked modal answers did not test that integration.
 - Keep one header row and full-width non-wrapping rows. The left-aligned `[Files]` button has
   explicit hover paint and stays away from the divider. Only an armed range shows a short hint.
-- Commit and push for review, but do not bump or publish until final-shape approval. Any later
-  authorized bump is at most patch. Keep version 0.0.1 unchanged.
+- Final shape approved. Release 0.0.2 as a Git tag and GitHub release; retain Git-based
+  installation. No npm publication or new release infrastructure is authorized.
+  Future releases require explicit approval.
 
 ## Implementation
 
@@ -22,6 +23,10 @@
 - Commits defaults to 34 columns (22 minimum). The switch closes the previous pane before opening
   the next. Other host commands are not intercepted. Message-pane behavior is unchanged.
 - Scope is available through the Show commit review scope command, not permanent chrome.
+- Single clicks paint immediately with `Opening`; requested reviews paint with `Loading`.
+  These previews never change loaded state. Selected row backgrounds stay continuous on hover.
+- Bind `s` to `hunk-history.files` and disable the native Files shortcut as documented in the
+  README. Both `h` and `s` then close the other view before opening a pane.
 
 ## Proof
 
@@ -30,11 +35,12 @@ endpoint orders, equal endpoints, release persistence, Escape, single-click timi
 drag rejection, failed loads and hover feedback. Node tests retain state and request-queue proof.
 
 Verify the actual Hunk host before claiming the interaction works there. Automated component
-checks alone cannot establish host hit targets or pointer dispatch. Final shape approval remains
-with the operator. No dependencies or alternate UI framework are added.
+checks alone cannot establish host hit targets or pointer dispatch. The operator has approved
+the final shape and the 0.0.2 patch release. No dependencies or alternate UI framework are added.
 
 Live host verification: terminal mouse press/release sequences armed a range without loading,
 kept the hint visible after release, applied newest-to-oldest 1–5 and oldest-to-newest 1–3,
 and cancelled with Escape. The Files button switched views on release; `h` returned to Commits.
-The original single-commit review was restored afterwards. Typecheck, 80 Node tests and eight
-rendered tests passed. Operator visual approval remains pending.
+The original single-commit review was restored afterwards. Subsequent live checks verified
+immediate single-click feedback, contiguous range backgrounds, and exclusive `h`/`s` switching.
+The release gate is typecheck, 81 Node tests and ten rendered tests.

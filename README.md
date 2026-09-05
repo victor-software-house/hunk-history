@@ -153,6 +153,6 @@ Direct tests cover pane swap ordering. They do not touch a live review window.
 Hunk loads TypeScript directly; no production build is needed. React and OpenTUI
 remain development dependencies because Hunk supplies them to extensions.
 
-[Interaction plan and release gate](docs/interaction-plan.md): implementation may
-be pushed for review, but version remains **0.0.1**. Do not bump or publish before
-explicit final-shape approval; any subsequently approved bump is at most patch.
+[Interaction plan and release decision](docs/interaction-plan.md): **0.0.2** is the
+approved patch release, distributed through Git tags and GitHub releases, not npm.
+Future releases require explicit approval.
