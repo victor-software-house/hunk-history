@@ -32,3 +32,9 @@ drag rejection, failed loads and hover feedback. Node tests retain state and req
 Verify the actual Hunk host before claiming the interaction works there. Automated component
 checks alone cannot establish host hit targets or pointer dispatch. Final shape approval remains
 with the operator. No dependencies or alternate UI framework are added.
+
+Live host verification: terminal mouse press/release sequences armed a range without loading,
+kept the hint visible after release, applied newest-to-oldest 1–5 and oldest-to-newest 1–3,
+and cancelled with Escape. The Files button switched views on release; `h` returned to Commits.
+The original single-commit review was restored afterwards. Typecheck, 80 Node tests and eight
+rendered tests passed. Operator visual approval remains pending.
