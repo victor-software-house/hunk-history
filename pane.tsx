@@ -22,7 +22,10 @@ export function CommitLogPane({ actions, width, height, theme, session, onFiles 
   const snapshot = useSyncExternalStore(subscribeSeries, seriesSnapshot);
   const { commits, position, range } = snapshot;
   const pending = useSyncExternalStore(subscribePending, pendingReview);
-  const painted = pending?.kind === "range" && pending.selection
+  const [clickPreview, setClickPreview] = useState<string | null>(null);
+  const painted = clickPreview !== null
+    ? { ...snapshot, range: null, position: commits.findIndex((commit) => commit.sha === clickPreview) }
+    : pending?.kind === "range" && pending.selection
     ? { ...snapshot, range: pending.selection, position: pending.selection.endpoint }
     : pending?.kind === "commit"
       ? { ...snapshot, range: null, position: commits.findIndex((commit) => commit.sha === pending.value) }
@@ -40,6 +43,7 @@ export function CommitLogPane({ actions, width, height, theme, session, onFiles 
   const cancelClick = () => {
     if (click.current) clearTimeout(click.current.timer);
     click.current = null;
+    setClickPreview(null);
   };
 
   useEffect(() => {
@@ -75,8 +79,10 @@ export function CommitLogPane({ actions, width, height, theme, session, onFiles 
       return;
     }
     cancelClick();
+    if (range !== null || commits[position ?? -1]?.sha !== sha) setClickPreview(sha);
     click.current = { sha, timer: setTimeout(() => {
       click.current = null;
+      setClickPreview(null);
       if (seriesSnapshot() !== snapshot) return;
       if (range !== null || commits[position ?? -1]?.sha !== sha)
         requestCommit(sha, actions.notify, session);
@@ -110,7 +116,7 @@ export function CommitLogPane({ actions, width, height, theme, session, onFiles 
           }}>{"[Files]"}</text>
         <text wrapMode="none" selectable={false} fg={anchor ? theme.text : theme.muted} bg={theme.panel}
           style={{ width: Math.max(0, width - 9), height: 1, flexShrink: 0 }}>
-          {anchor ? " End · Esc" : pending ? loadingLabel : seriesHeading(position, commits.length, Math.max(0, width - 9), range)}
+          {anchor ? " End · Esc" : clickPreview !== null ? ` Opening ${(painted.position ?? -1) + 1}` : pending ? loadingLabel : seriesHeading(position, commits.length, Math.max(0, width - 9), range)}
         </text>
       </box>
       <scrollbox ref={scroll} focused={false} scrollY={true}

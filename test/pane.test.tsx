@@ -120,12 +120,19 @@ for (const [start, end] of [[0, 3], [3, 0], [2, 2]] as const) {
   });
 }
 
-test("single clicks navigate only after the double-click interval", async () => {
+test("single clicks highlight immediately, then navigate after the double-click interval", async () => {
   const ui = await pane();
+  const loaded = seriesSnapshot();
+  const selectedBackground = ui.captureSpans().lines[1]!.spans[0]!.bg;
   await ui.click(1);
   assert.deepEqual(requested, []);
+  assert.equal(seriesSnapshot(), loaded);
+  assert.match(ui.captureCharFrame(), /Opening 2/);
+  assert.deepEqual(ui.captureSpans().lines[2]!.spans[0]!.bg, selectedBackground);
+  assert.notDeepEqual(ui.captureSpans().lines[1]!.spans[0]!.bg, selectedBackground);
   await ui.settle();
   assert.deepEqual(requested, [["show", commits[1]!.sha]]);
+  assert.doesNotMatch(ui.captureCharFrame(), /Opening/);
 });
 
 test("Escape cancels armed range and pending single clicks", async () => {
@@ -138,6 +145,7 @@ test("Escape cancels armed range and pending single clicks", async () => {
   await act(async () => { ui.mockInput.pressEscape(); });
   await ui.settle();
   assert.deepEqual(requested, []);
+  assert.doesNotMatch(ui.captureCharFrame(), /Opening/);
 });
 
 test("armed endpoint survives wheel scrolling; drag never applies a range", async () => {

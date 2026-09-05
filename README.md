@@ -19,8 +19,9 @@ Requires Hunk 0.19.0 or newer (extension API 6) and Git on PATH.
 - **Click the other endpoint** to immediately load the inclusive range. Oldest-first
   and newest-first work identically. Clicking the same endpoint loads one commit.
 - **Esc** cancels. Switching to Files or replacing the review also cancels the draft.
-- Single-click navigation waits 300 ms to distinguish a double-click. Once a range
-  is loaded, a single click returns to a single-commit review.
+- Single clicks highlight immediately with **Opening** feedback. Navigation waits
+  300 ms to distinguish a double-click; **Loading** then tracks the actual request.
+  Once a range is loaded, a single click returns to a single-commit review.
 
 No dragging, Shift-click, ellipsis menu or separate Apply action is required.
 The closing click highlights the requested range immediately with a **Loading** label.
