@@ -5,240 +5,258 @@ import { testRender } from "@opentui/react/test-utils";
 import type { TestRenderer } from "@opentui/core/testing";
 import type { ExtensionPaneProps } from "hunkdiff/extension";
 import { publishSeries, selectedRange, seriesSnapshot } from "../store.ts";
+import { cancelHistoryGesture, rememberHistoryScroll, historySnapshot } from "../history.ts";
 import { resetPending, resetSessionId, type SessionDeps } from "../session.ts";
 import { CommitLogPane } from "../pane.tsx";
+import { ScrollBoxRenderable } from "@opentui/core";
 
 const requested: (readonly string[])[] = [];
-const session: SessionDeps = {
-  pid: 4242,
-  run: async (args) => {
-    if (args[1] === "list")
-      return JSON.stringify({ sessions: [{ pid: 4242, sessionId: "test-pane" }] });
-    requested.push(args.slice(4));
-    return "Reloaded";
-  },
-};
 let renderer: TestRenderer | undefined;
-afterEach(() => {
-  act(() => {
-    renderer?.destroy();
-  });
-});
-
-const commits = Array.from({ length: 20 }, (_, index) => ({
-  sha: String(index + 1).padStart(40, "0"),
-  abbrev: String(index + 1).padStart(7, "0"),
-  subject: `Change ${index + 1}`,
-  baseSha: String(index).padStart(40, "0"),
+const commits = Array.from({ length: 100 }, (_, index) => ({
+  sha: String(index + 1).padStart(40, "0"), abbrev: String(index + 1).padStart(7, "0"),
+  subject: `Change ${index + 1}`, baseSha: String(index).padStart(40, "0"),
 }));
 const warnings: string[] = [];
 let filesShown = 0;
 const props: ExtensionPaneProps = {
-  width: 34,
-  height: 12,
-  placement: "left",
-  files: [],
-  selectedFileId: null,
-  selectedHunkIndex: null,
-  currentLine: null,
+  width: 34, height: 12, placement: "left", files: [], selectedFileId: null,
+  selectedHunkIndex: null, currentLine: null,
   keybindings: { matches: () => false, getKeys: () => [] },
-  actions: {
-    notify: (message) => warnings.push(message),
-    selectFile: () => {},
-    selectHunk: () => {},
-    revealLine: () => {},
-  },
+  actions: { notify: (message) => warnings.push(message), selectFile: () => {}, selectHunk: () => {}, revealLine: () => {} },
   theme: {
-    appearance: "dark",
-    background: "#101010",
-    panel: "#101010",
-    panelAlt: "#202020",
-    border: "#606060",
-    accent: "#00ffff",
-    accentMuted: "#004444",
-    text: "#ffffff",
-    muted: "#aaaaaa",
-    selectedHunk: "#303030",
-    badgeAdded: "#00ff00",
-    badgeRemoved: "#ff0000",
-    badgeNeutral: "#aaaaaa",
-    fileNew: "#00ff00",
-    fileDeleted: "#ff0000",
-    fileRenamed: "#ffff00",
-    fileModified: "#ffff00",
-    fileUntracked: "#aaaaaa",
-    noteBorder: "#606060",
+    appearance: "dark", background: "#101010", panel: "#101010", panelAlt: "#202020", border: "#606060",
+    accent: "#00ffff", accentMuted: "#004444", text: "#ffffff", muted: "#aaaaaa", selectedHunk: "#303030",
+    badgeAdded: "#00ff00", badgeRemoved: "#ff0000", badgeNeutral: "#aaaaaa", fileNew: "#00ff00",
+    fileDeleted: "#ff0000", fileRenamed: "#ffff00", fileModified: "#ffff00", fileUntracked: "#aaaaaa", noteBorder: "#606060",
   },
 };
 
-beforeEach(() => {
-  resetPending();
-  resetSessionId();
-  requested.length = 0;
-  warnings.length = 0;
-  filesShown = 0;
-  publishSeries({ commits, position: 0, range: null, message: null, scope: "main..topic" });
-});
+function publishCommit(sha: string) {
+  const snapshot = seriesSnapshot();
+  const position = snapshot.commits.findIndex((commit) => commit.sha === sha);
+  publishSeries({ ...snapshot, position, commit: snapshot.commits[position], range: null, review: `repo show ${sha}` });
+}
+function deps(reload: (args: readonly string[]) => Promise<string | null> = async (args) => {
+  if (args[0] === "show") publishCommit(args[1]!);
+  return "Reloaded";
+}): SessionDeps {
+  return { pid: 4242, run: async (args) => {
+    if (args[1] === "list") return JSON.stringify({ sessions: [{ pid: 4242, sessionId: "pane" }] });
+    requested.push(args.slice(4));
+    return reload(args.slice(4));
+  } };
+}
 
-async function pane(deps: SessionDeps = session, width = props.width) {
-  const setup = await testRender(<CommitLogPane {...props} width={width} session={deps}
-    onFiles={() => { filesShown += 1; }} />, { width, height: 12 });
+beforeEach(() => {
+  resetPending(); resetSessionId(); requested.length = 0; warnings.length = 0; filesShown = 0;
+  publishSeries({ commits, position: 0, commit: commits[0], range: null, message: null, scope: "HEAD" });
+  cancelHistoryGesture();
+  rememberHistoryScroll(0);
+});
+afterEach(() => { act(() => { renderer?.destroy(); }); });
+
+async function pane(session = deps()) {
+  const setup = await testRender(<CommitLogPane {...props} session={session}
+    onFiles={() => { filesShown++; }} />, { width: 34, height: 12 });
   renderer = setup.renderer;
-  await setup.renderOnce();
+  const renderFrame = async () => {
+    await act(async () => { await setup.renderOnce(); });
+    await act(async () => { await setup.renderOnce(); });
+  };
+  await renderFrame();
   return {
     ...setup,
-    async click(index: number, double = false) {
-      const row = setup.renderer.root.findDescendantById(`commit-log-row-${index}`);
-      assert.ok(row);
-      assert.ok(row.y >= 1 && row.y < 12);
-      await act(async () => {
-        if (double) await setup.mockMouse.doubleClick(row.x + 2, row.y);
-        else await setup.mockMouse.click(row.x + 2, row.y);
-      });
-      await setup.renderOnce();
+    renderOnce: renderFrame,
+    async clickId(id: string) {
+      const row = setup.renderer.root.findDescendantById(id);
+      assert.ok(row, `mounted ${id}`);
+      assert.ok(row.y >= 0 && row.y < 12, `${id} visible at ${row.y}`);
+      await act(async () => { await setup.mockMouse.click(row.x + 2, row.y); });
+      await renderFrame();
     },
-    async settle() {
-      await act(async () => { await new Promise((resolve) => setTimeout(resolve, 330)); });
-      await setup.renderOnce();
-    },
+    async click(index: number) { await this.clickId(`commit-log-row-${index}`); },
+    async double(index: number) { await this.click(index); await this.click(index); },
   };
 }
 
-for (const [start, end] of [[0, 3], [3, 0], [2, 2]] as const) {
-  test(`double-click ${start}, click ${end}: inclusive range without an intermediate reload`, async () => {
+test("single clicks dispatch immediately, not after a double-click timeout", async () => {
+  const ui = await pane();
+  await ui.click(2);
+  assert.deepEqual(requested, [["show", commits[2]!.sha]]);
+  assert.equal(seriesSnapshot().commit?.sha, commits[2]!.sha);
+  assert.doesNotMatch(ui.captureCharFrame(), /Opening|\[Range\]/);
+});
+
+for (const [start, end] of [[1, 4], [4, 1], [2, 2]]) {
+  test(`double-click ${start}, endpoint ${end}: immediate first click and inclusive range`, async () => {
     const ui = await pane();
-    await ui.click(start, true);
-    await ui.settle();
-    assert.deepEqual(requested, []);
+    await ui.double(start!);
     assert.match(ui.captureCharFrame(), /End · Esc/);
-    await ui.click(end);
-    await ui.settle();
-    assert.deepEqual(requested, [start === end ? ["show", commits[start]!.sha]
-      : ["diff", selectedRange(seriesSnapshot(), start, end)!.revisionRange]]);
-    assert.equal(seriesSnapshot().range, null, "loaded state changes only on successful publication");
+    assert.deepEqual(requested, [["show", commits[start!]!.sha]]);
+    await ui.click(end!);
+    assert.deepEqual(requested.at(-1), start === end ? ["show", commits[end!]!.sha]
+      : ["diff", selectedRange(seriesSnapshot(), start!, end!)!.revisionRange]);
     assert.doesNotMatch(ui.captureCharFrame(), /End · Esc/);
   });
 }
 
-test("single clicks highlight immediately, then navigate after the double-click interval", async () => {
-  const ui = await pane();
-  const loaded = seriesSnapshot();
-  const selectedBackground = ui.captureSpans().lines[1]!.spans[0]!.bg;
-  await ui.click(1);
-  assert.deepEqual(requested, []);
-  assert.equal(seriesSnapshot(), loaded);
-  assert.match(ui.captureCharFrame(), /Opening 2/);
-  assert.deepEqual(ui.captureSpans().lines[2]!.spans[0]!.bg, selectedBackground);
-  assert.notDeepEqual(ui.captureSpans().lines[1]!.spans[0]!.bg, selectedBackground);
-  await ui.settle();
-  assert.deepEqual(requested, [["show", commits[1]!.sha]]);
-  assert.doesNotMatch(ui.captureCharFrame(), /Opening/);
-});
+for (const timing of ["between-clicks", "after-arming", "after-endpoint"] as const) {
+  test(`first commit response ${timing} cannot cancel double-click recognition or range intent`, async () => {
+    let finish: (() => void) | undefined;
+    const ui = await pane(deps(async (args) => {
+      if (args[0] !== "show") return "Reloaded";
+      return new Promise<string>((resolve) => { finish = () => { publishCommit(args[1]!); resolve("Reloaded"); }; });
+    }));
+    await ui.click(1);
+    const complete = async () => { await act(async () => { finish!(); }); await ui.renderOnce(); };
+    if (timing === "between-clicks") await complete();
+    await ui.click(1);
+    assert.match(ui.captureCharFrame(), /End · Esc/);
+    if (timing === "after-arming") { await complete(); assert.match(ui.captureCharFrame(), /End · Esc/); }
+    await ui.click(4);
+    if (timing === "after-endpoint") await complete();
+    assert.deepEqual(requested.at(-1), ["diff", selectedRange(seriesSnapshot(), 1, 4)!.revisionRange]);
+    assert.doesNotMatch(ui.captureCharFrame(), /End · Esc/);
+  });
+}
 
-test("Escape cancels armed range and pending single clicks", async () => {
+test("Escape and external review replacement cancel the gesture, not the loaded review", async () => {
   const ui = await pane();
-  await ui.click(2, true);
-  await act(async () => { ui.mockInput.pressEscape(); });
-  await ui.settle();
+  await ui.double(1);
+  await act(async () => { ui.mockInput.pressEscape(); await new Promise((resolve) => setTimeout(resolve, 40)); });
+  await ui.renderOnce();
   assert.doesNotMatch(ui.captureCharFrame(), /End · Esc/);
-  await ui.click(1);
-  await act(async () => { ui.mockInput.pressEscape(); });
-  await ui.settle();
-  assert.deepEqual(requested, []);
-  assert.doesNotMatch(ui.captureCharFrame(), /Opening/);
+  await ui.double(2);
+  await act(async () => { cancelHistoryGesture(); }); await ui.renderOnce();
+  assert.doesNotMatch(ui.captureCharFrame(), /End · Esc/);
+  assert.equal(seriesSnapshot().commit?.sha, commits[2]!.sha);
 });
 
-test("armed endpoint survives wheel scrolling; drag never applies a range", async () => {
+test("working-state rows select without erasing history, Files remains exclusive", async () => {
   const ui = await pane();
-  await ui.click(0, true);
-  await act(async () => {
-    await ui.mockMouse.drag(15, 4, 33, 0);
-    for (let i = 0; i < 6; i += 1) await ui.mockMouse.scroll(25, 10, "down");
-  });
-  await ui.renderOnce();
-  assert.deepEqual(requested, []);
-  const end = commits.findIndex((_, index) => {
-    const row = ui.renderer.root.findDescendantById(`commit-log-row-${index}`);
-    return index > 10 && row && row.y >= 1 && row.y < 12;
-  });
-  assert.ok(end > 10);
-  await ui.click(end);
-  await ui.settle();
-  assert.deepEqual(requested, [["diff", selectedRange(seriesSnapshot(), 0, end)!.revisionRange]]);
-});
-
-test("failed range leaves loaded selection intact", async () => {
-  const ui = await pane({ ...session, run: async (args) => {
-    if (args[4] === "diff") return null;
-    return session.run(args);
-  } });
-  const loaded = seriesSnapshot();
-  await ui.click(0, true);
-  await ui.click(2);
-  await ui.settle();
-  assert.equal(seriesSnapshot(), loaded);
-  assert.ok(warnings.length > 0);
-});
-
-test("compact header keeps Files away from divider and changes its hover paint", async () => {
-  const ui = await pane(session, 22);
-  const button = ui.renderer.root.findDescendantById("show-files");
-  assert.ok(button);
-  assert.ok(button.x + button.width < 20);
-  assert.match(ui.captureCharFrame(), /\[Files\]/);
-  assert.doesNotMatch(ui.captureCharFrame(), /⋯|Start|not set/);
-  assert.equal(ui.renderer.root.findDescendantById("commit-log-row-10")?.y, 11);
-  const before = ui.captureSpans();
-  await act(async () => { await ui.mockMouse.moveTo(button.x + 2, button.y); });
-  await ui.renderOnce();
-  assert.notDeepEqual(ui.captureSpans(), before);
-  await act(async () => { await ui.mockMouse.click(button.x + 2, button.y); });
+  await ui.clickId("review-staged");
+  assert.deepEqual(requested.at(-1), ["diff", "--staged", "--watch"]);
+  await ui.clickId("review-unstaged");
+  assert.deepEqual(requested.at(-1), ["diff", "--watch"]);
+  assert.equal(seriesSnapshot().commits.length, 100);
+  await ui.double(1);
+  await ui.clickId("show-files");
   assert.equal(filesShown, 1);
+  assert.doesNotMatch(ui.captureCharFrame(), /End · Esc/);
 });
 
-test("commit hover paints immediately without navigating and preserves the range anchor", async () => {
-  const ui = await pane();
-  const row = ui.renderer.root.findDescendantById("commit-log-row-1");
-  assert.ok(row);
-  const resting = ui.captureSpans().lines[row.y];
-  await act(async () => { await ui.mockMouse.moveTo(row.x + 2, row.y); });
-  await ui.renderOnce();
-  assert.notDeepEqual(ui.captureSpans().lines[row.y], resting);
-  assert.deepEqual(requested, []);
-  await act(async () => { await ui.mockMouse.moveTo(25, 0); });
-  await ui.renderOnce();
-  assert.deepEqual(ui.captureSpans().lines[row.y], resting);
-  await ui.click(1, true);
-  const anchored = ui.captureSpans().lines[row.y];
-  await act(async () => { await ui.mockMouse.moveTo(25, 0); });
-  await ui.renderOnce();
-  assert.deepEqual(ui.captureSpans().lines[row.y], anchored);
-  assert.deepEqual(requested, []);
-});
-
-test("final click paints the range immediately, hover keeps it continuous, failure restores it", async () => {
-  let finish: ((result: string | null) => void) | undefined;
-  const ui = await pane({ ...session, run: async (args) => {
-    if (args[4] === "diff") return new Promise<string | null>((resolve) => { finish = resolve; });
-    return session.run(args);
-  } });
+test("failed range restores the loaded selection after its pending highlight", async () => {
+  let fail: (() => void) | undefined;
+  const ui = await pane(deps(async (args) => {
+    if (args[0] === "show") { publishCommit(args[1]!); return "Reloaded"; }
+    return new Promise<null>((resolve) => { fail = () => resolve(null); });
+  }));
+  await ui.double(1); await ui.click(4);
+  assert.match(ui.captureCharFrame(), /Loading/);
   const loaded = seriesSnapshot();
-  const selectedBackground = ui.captureSpans().lines[1]!.spans[0]!.bg;
-  await ui.click(1, true);
-  await ui.click(3);
-  assert.ok(finish, "daemon is still waiting");
-  assert.match(ui.captureCharFrame(), /Loading 2–4/);
+  await act(async () => { fail!(); }); await ui.renderOnce();
   assert.equal(seriesSnapshot(), loaded);
-  const hovered = ui.renderer.root.findDescendantById("commit-log-row-2");
-  assert.ok(hovered);
-  await act(async () => { await ui.mockMouse.moveTo(hovered.x + 2, hovered.y); });
-  await ui.renderOnce();
-  for (const line of ui.captureSpans().lines.slice(2, 5)) {
-    for (const span of line.spans) assert.deepEqual(span.bg, selectedBackground, JSON.stringify(line));
-  }
-  await act(async () => { finish!(null); });
-  await ui.renderOnce();
-  assert.equal(seriesSnapshot(), loaded);
+  assert.equal(warnings.length, 1);
   assert.doesNotMatch(ui.captureCharFrame(), /Loading/);
-  assert.deepEqual(ui.captureSpans().lines[1]!.spans[0]!.bg, selectedBackground);
+});
+
+test("history mounts only a bounded row window and scrolls to later commits", async () => {
+  const ui = await pane();
+  assert.equal(ui.renderer.root.findDescendantById("commit-log-row-90"), undefined);
+  await act(async () => { publishCommit(commits[90]!.sha); });
+  await ui.renderOnce(); await ui.renderOnce();
+  assert.ok(ui.renderer.root.findDescendantById("commit-log-row-90"));
+  assert.equal(ui.renderer.root.findDescendantById("commit-log-row-0"), undefined);
+  assert.match(ui.captureCharFrame(), /Change 91/);
+});
+
+test("an armed endpoint survives scrolling while a drag never selects", async () => {
+  const ui = await pane();
+  await ui.double(0);
+  await act(async () => {
+    await ui.mockMouse.drag(15, 6, 33, 0);
+    for (let i = 0; i < 6; i++) await ui.mockMouse.scroll(25, 10, "down");
+  });
+  await ui.renderOnce();
+  assert.deepEqual(requested, []);
+  assert.match(ui.captureCharFrame(), /End · Esc/);
+  const endpoint = commits.findIndex((_, index) => {
+    const row = ui.renderer.root.findDescendantById(`commit-log-row-${index}`);
+    return index > 10 && row && row.y >= 3 && row.y < 12;
+  });
+  assert.ok(endpoint > 10);
+  await ui.click(endpoint);
+  assert.deepEqual(requested, [["diff", selectedRange(seriesSnapshot(), 0, endpoint)!.revisionRange]]);
+});
+
+test("hover keeps full-width selected backgrounds and never navigates", async () => {
+  let finish: (() => void) | undefined;
+  const ui = await pane(deps(async (args) => {
+    if (args[0] === "show") { publishCommit(args[1]!); return "Reloaded"; }
+    return new Promise<null>((resolve) => { finish = () => resolve(null); });
+  }));
+  const idle = ui.renderer.root.findDescendantById("commit-log-row-2")!;
+  const before = ui.captureSpans().lines[idle.y];
+  await act(async () => { await ui.mockMouse.moveTo(idle.x + 2, idle.y); }); await ui.renderOnce();
+  assert.notDeepEqual(ui.captureSpans().lines[idle.y], before);
+  assert.deepEqual(requested, []);
+  await ui.double(1); await ui.click(4);
+  const row = ui.renderer.root.findDescendantById("commit-log-row-2")!;
+  await act(async () => { await ui.mockMouse.moveTo(row.x + 2, row.y); }); await ui.renderOnce();
+  const selected = ui.captureSpans().lines[row.y]!.spans[0]!.bg;
+  for (const index of [1, 2, 3, 4]) {
+    const visible = ui.renderer.root.findDescendantById(`commit-log-row-${index}`)!;
+    for (const span of ui.captureSpans().lines[visible.y]!.spans) assert.deepEqual(span.bg, selected);
+  }
+  await act(async () => { finish!(); });
+});
+
+test("double-click recognition and its anchor survive Hunk's full App remount", async () => {
+  let ui = await pane();
+  await ui.click(1);
+  act(() => { renderer!.destroy(); });
+  ui = await pane();
+  await ui.click(1);
+  assert.match(ui.captureCharFrame(), /End · Esc/);
+  act(() => { renderer!.destroy(); });
+  ui = await pane();
+  assert.match(ui.captureCharFrame(), /End · Esc/);
+  await ui.click(4);
+  assert.deepEqual(requested, [["show", commits[1]!.sha], ["diff", selectedRange(seriesSnapshot(), 1, 4)!.revisionRange]]);
+});
+
+test("working-state reload remount keeps the browsed history viewport", async () => {
+  let ui = await pane();
+  await act(async () => { publishCommit(commits[90]!.sha); });
+  await ui.renderOnce(); await ui.renderOnce();
+  assert.match(ui.captureCharFrame(), /Change 91/);
+  assert.ok(historySnapshot().scrollTop > 0, "scroll persisted before remount");
+  await act(async () => {
+    publishSeries({ ...seriesSnapshot(), position: null, commit: null, range: null, review: "repo staged changes" });
+  });
+  assert.ok(historySnapshot().scrollTop > 0, "scroll persisted after selecting staged");
+  act(() => { renderer!.destroy(); });
+  assert.ok(historySnapshot().scrollTop > 0, "scroll persisted after destroying old pane");
+  ui = await pane();
+  await ui.renderOnce();
+  const view = ui.renderer.root.findDescendantById("history-scroll");
+  assert.ok(view instanceof ScrollBoxRenderable);
+  assert.ok(view.scrollTop > 0, JSON.stringify({ saved: historySnapshot().scrollTop, top: view.scrollTop, scroll: view.scrollHeight, content: view.content.height, viewport: view.viewport.height }));
+  assert.match(ui.captureCharFrame(), /Change 91/);
+  assert.match(ui.captureCharFrame(), /▸ Staged/);
+});
+
+test("the second click survives a host remount between its press and release", async () => {
+  let ui = await pane();
+  await ui.click(1);
+  const row = ui.renderer.root.findDescendantById("commit-log-row-1")!;
+  await act(async () => { await ui.mockMouse.pressDown(row.x + 2, row.y); });
+  act(() => { renderer!.destroy(); });
+  ui = await pane();
+  const next = ui.renderer.root.findDescendantById("commit-log-row-1")!;
+  await act(async () => { await ui.mockMouse.emitMouseEvent("up", next.x + 2, next.y); });
+  await ui.renderOnce();
+  assert.match(ui.captureCharFrame(), /End · Esc/);
+  await ui.click(4);
+  assert.deepEqual(requested.at(-1), ["diff", selectedRange(seriesSnapshot(), 1, 4)!.revisionRange]);
 });

@@ -8,6 +8,8 @@ import {
   pendingRange,
   requestCommit,
   requestRange,
+  requestWorking,
+  requestComparison,
   resetPending,
   resetSessionId,
   type CommandRunner,
@@ -204,7 +206,7 @@ test("a burst of steps loads where the reviewer stopped, not every stop", async 
 test("a range request coalesces behind an in-flight commit request", async () => {
   const cli = deferredCli();
   const deps = { run: cli.run, pid: OWN_PID };
-  const selection = { anchor: 0, endpoint: 2, start: 0, end: 2, revisionRange: `${"1".repeat(40)}..${"3".repeat(40)}` };
+  const selection = { anchorSha: "1".repeat(40), endpointSha: "3".repeat(40), anchor: 0, endpoint: 2, start: 0, end: 2, revisionRange: `${"1".repeat(40)}..${"3".repeat(40)}` };
   requestCommit("a".repeat(40), () => {}, deps);
   await settle();
   requestRange(selection, () => {}, deps);
@@ -270,3 +272,25 @@ test("the pending target is what stepping counts from", async () => {
 
   assert.equal(pendingCommit(), null, "a settled window is not on its way anywhere");
 });
+
+for (const [kind, args] of [
+  ["staged", ["--staged", "--watch"]],
+  ["unstaged", ["--watch"]],
+  ["all", ["HEAD", "--watch"]],
+] as const) {
+  test(`${kind} reviews use the live working-state CLI path`, async () => {
+    const cli = daemon();
+    requestWorking(kind, () => {}, { run: cli.run, pid: OWN_PID });
+    await settle();
+    assert.deepEqual(cli.calls.at(-1), ["session", "reload", SESSION_ID, "--", "diff", ...args]);
+  });
+}
+
+for (const through of ["HEAD", "worktree"] as const) {
+  test(`comparison through ${through} preserves a symbolic live endpoint`, async () => {
+    const cli = daemon();
+    requestComparison(SHA, through, () => {}, { run: cli.run, pid: OWN_PID });
+    await settle();
+    assert.deepEqual(cli.calls.at(-1), ["session", "reload", SESSION_ID, "--", "diff", through === "HEAD" ? `${SHA}..HEAD` : SHA, "--watch"]);
+  });
+}

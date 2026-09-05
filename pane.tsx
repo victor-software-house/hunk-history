@@ -1,71 +1,57 @@
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { MouseButton, type MouseEvent as TuiMouseEvent, type ScrollBoxRenderable } from "@opentui/core";
-import { useKeyboard } from "@opentui/react";
+import { useKeyboard, useRenderer } from "@opentui/react";
 import type { ExtensionPaneProps } from "hunkdiff/extension";
 import { messageRows, type Tone } from "./highlight.ts";
-import { commitRow, seriesHeading } from "./row.ts";
-import { pendingReview, subscribePending, requestCommit, requestRange, type SessionDeps } from "./session.ts";
-import { isSelectedIndex, selectedRange, seriesSnapshot, subscribeSeries } from "./store.ts";
+import { commitRow, seriesHeading, clip } from "./row.ts";
+import { pendingReview, subscribePending, requestCommit, requestRange, requestWorking, type SessionDeps } from "./session.ts";
+import { isSelectedIndex, selectedRange, remapRange, seriesSnapshot, subscribeSeries } from "./store.ts";
+import { historySnapshot, subscribeHistory, acknowledgeNewCommits, setHistoryGesture, rememberHistoryScroll, setHistoryPressed } from "./history.ts";
 
 export interface CommitLogPaneProps extends ExtensionPaneProps {
   session?: SessionDeps;
   onFiles(): void;
+  onMore?(): void;
 }
 
 const DOUBLE_CLICK_MS = 300;
 
-function rowId(index: number): string {
-  return `commit-log-row-${index}`;
-}
-
-export function CommitLogPane({ actions, width, height, theme, session, onFiles }: CommitLogPaneProps): ReactNode {
+export function CommitLogPane({ actions, width, height, theme, session, onFiles, onMore }: CommitLogPaneProps): ReactNode {
   const snapshot = useSyncExternalStore(subscribeSeries, seriesSnapshot);
+  const history = useSyncExternalStore(subscribeHistory, historySnapshot);
   const { commits, position, range } = snapshot;
   const pending = useSyncExternalStore(subscribePending, pendingReview);
-  const [clickPreview, setClickPreview] = useState<string | null>(null);
-  const painted = clickPreview !== null
-    ? { ...snapshot, range: null, position: commits.findIndex((commit) => commit.sha === clickPreview) }
-    : pending?.kind === "range" && pending.selection
-    ? { ...snapshot, range: pending.selection, position: pending.selection.endpoint }
+  const pendingRange = pending?.kind === "range" ? pending.selection : null;
+  const requestedRange = pendingRange ? remapRange(snapshot, pendingRange) : null;
+  const painted = requestedRange
+    ? { ...snapshot, range: requestedRange, position: requestedRange.endpoint }
     : pending?.kind === "commit"
       ? { ...snapshot, range: null, position: commits.findIndex((commit) => commit.sha === pending.value) }
-      : snapshot;
-  const loadingLabel = painted.range
-    ? ` Loading ${painted.range.start + 1}–${painted.range.end + 1}`
-    : ` Loading ${(painted.position ?? -1) + 1}`;
+      : pending ? { ...snapshot, range: null, position: null } : snapshot;
   const scroll = useRef<ScrollBoxRenderable | null>(null);
-  const [anchor, setAnchor] = useState<string | null>(null);
-  const [filesHovered, setFilesHovered] = useState(false);
-  const [hoveredCommit, setHoveredCommit] = useState<string | null>(null);
-  const pressed = useRef<string | null>(null);
-  const click = useRef<{ sha: string; timer: ReturnType<typeof setTimeout> } | null>(null);
+  const anchor = history.anchor;
+  const [hovered, setHovered] = useState<string | null>(null);
+  const [offset, setOffset] = useState(history.scrollTop);
+  const previousRows = useRef({ commits, older: history.hasMore });
+  const loadedSha = snapshot.commit?.sha ?? commits[position ?? -1]?.sha;
 
-  const cancelClick = () => {
-    if (click.current) clearTimeout(click.current.timer);
-    click.current = null;
-    setClickPreview(null);
-  };
-
-  useEffect(() => {
-    setAnchor(null);
-    setHoveredCommit(null);
-    pressed.current = null;
-    return cancelClick;
-  }, [snapshot]);
-
+  const cancel = () => { setHistoryGesture(null); };
+  // The host remounts App on daemon reload: gestures live outside this component.
+  useEffect(() => { setHovered(null); }, [history.epoch]);
+  useEffect(() => { if (anchor && !commits.some((row) => row.sha === anchor)) cancel(); }, [commits, anchor]);
   useKeyboard((key) => {
-    if (key.name !== "escape" || (anchor === null && click.current === null)) return;
+    const click = historySnapshot().click;
+    if (key.name !== "escape" || (anchor === null && (!click || Date.now() - click.at > DOUBLE_CLICK_MS))) return;
     key.stopPropagation();
-    cancelClick();
-    setAnchor(null);
+    cancel();
   });
 
   const choose = (sha: string) => {
+    const { anchor, click } = historySnapshot();
     if (anchor !== null) {
-      cancelClick();
       const start = commits.findIndex((commit) => commit.sha === anchor);
       const end = commits.findIndex((commit) => commit.sha === sha);
-      setAnchor(null);
+      cancel();
       if (start === end) requestCommit(sha, actions.notify, session);
       else {
         const selection = selectedRange(snapshot, start, end);
@@ -73,88 +59,143 @@ export function CommitLogPane({ actions, width, height, theme, session, onFiles 
       }
       return;
     }
-    if (click.current?.sha === sha) {
-      cancelClick();
-      setAnchor(sha);
+    const now = Date.now();
+    if (click?.sha === sha && now - click.at <= DOUBLE_CLICK_MS) {
+      setHistoryGesture(sha);
       return;
     }
-    cancelClick();
-    if (range !== null || commits[position ?? -1]?.sha !== sha) setClickPreview(sha);
-    click.current = { sha, timer: setTimeout(() => {
-      click.current = null;
-      setClickPreview(null);
-      if (seriesSnapshot() !== snapshot) return;
-      if (range !== null || commits[position ?? -1]?.sha !== sha)
-        requestCommit(sha, actions.notify, session);
-    }, DOUBLE_CLICK_MS) };
+    setHistoryGesture(null, { sha, at: now });
+    if (sha === commits.at(-1)?.sha) acknowledgeNewCommits();
+    if (range !== null || commits[position ?? -1]?.sha !== sha || pending !== null)
+      requestCommit(sha, actions.notify, session);
   };
 
+  const renderer = useRenderer();
   useEffect(() => {
-    if (position !== null) scroll.current?.scrollChildIntoView(rowId(position));
-  }, [position, commits]);
+    const view = scroll.current;
+    if (!view) return;
+    let restore = historySnapshot().scrollTop;
+    let active = true;
+    const update = () => {
+      if (!active) return;
+      if (restore > 0) {
+        if (view.viewport.height === 0 || view.scrollHeight <= view.viewport.height) return;
+        const target = restore;
+        restore = 0;
+        view.scrollTop = target;
+      }
+      setOffset(view.scrollTop);
+      rememberHistoryScroll(view.scrollTop);
+    };
+    const afterLayout = () => { queueMicrotask(update); };
+    view.verticalScrollBar.on("change", update);
+    renderer.root.on("layout-changed", afterLayout);
+    update();
+    return () => {
+      active = false;
+      view.verticalScrollBar.off("change", update);
+      renderer.root.off("layout-changed", afterLayout);
+    };
+  }, []);
+  useEffect(() => {
+    const view = scroll.current;
+    if (!view) return;
+    const old = previousRows.current;
+    if (old.commits === commits && old.older === history.hasMore) return;
+    const first = old.commits[Math.max(0, Math.floor(view.scrollTop) - (old.older ? 1 : 0))];
+    const index = first ? commits.findIndex((row) => row.sha === first.sha) : -1;
+    if (old.commits !== commits && index >= 0) {
+      view.scrollTop += index - old.commits.indexOf(first!) + Number(history.hasMore) - Number(old.older);
+    }
+    previousRows.current = { commits, older: history.hasMore };
+    setOffset(view.scrollTop);
+  }, [commits, history.hasMore]);
+  useEffect(() => {
+    const view = scroll.current;
+    const index = commits.findIndex((row) => row.sha === loadedSha);
+    if (!view || index < 0) return;
+    const row = index + (history.hasMore ? 1 : 0);
+    const visible = Math.max(1, height - 3);
+    if (row < view.scrollTop) view.scrollTop = row;
+    else if (row >= view.scrollTop + visible) view.scrollTop = row - visible + 1;
+    setOffset(view.scrollTop);
+    rememberHistoryScroll(view.scrollTop);
+  }, [loadedSha]);
+
+  const start = Math.max(0, Math.floor(offset) - 8);
+  const end = Math.min(commits.length, start + Math.max(1, height) + 16);
+  const handlers = (id: string, action: () => void) => ({
+    onMouseOver: () => setHovered(id),
+    onMouseOut: () => setHovered(null),
+    onMouseDown: (event: TuiMouseEvent) => {
+      if (event.button !== MouseButton.LEFT) return;
+      event.stopPropagation(); event.preventDefault(); setHistoryPressed(id);
+    },
+    onMouseDrag: () => { setHistoryGesture(historySnapshot().anchor); },
+    onMouseUp: (event: TuiMouseEvent) => {
+      if (event.button !== MouseButton.LEFT) return;
+      event.stopPropagation();
+      if (historySnapshot().pressed !== id) return;
+      setHistoryPressed(null);
+      if (!event.isDragging) action();
+    },
+  });
+  const label = anchor ? " End · Esc" : pending ? " Loading" : history.error ? ` ${history.error}`
+    : history.newCommits > 0 ? ` ${history.newCommits} new · click to view`
+    : snapshot.commit && position === null ? " Commit outside scope"
+    : seriesHeading(position, commits.length, width - 7, range) + (history.hasMore ? "+" : "");
 
   return (
     <box style={{ width, height, overflow: "hidden", backgroundColor: theme.panel, flexDirection: "column" }}>
       <box style={{ height: 1, flexShrink: 0, flexDirection: "row", backgroundColor: theme.panel }}>
         <text id="show-files" wrapMode="none" selectable={false}
-          fg={filesHovered ? theme.text : theme.muted}
-          bg={filesHovered ? theme.accentMuted : theme.panelAlt}
+          fg={hovered === "files" ? theme.text : theme.muted}
+          bg={hovered === "files" ? theme.accentMuted : theme.panelAlt}
           style={{ width: 7, height: 1, flexShrink: 0 }}
-          onMouseOver={() => setFilesHovered(true)} onMouseOut={() => setFilesHovered(false)}
-          onMouseDown={(event: TuiMouseEvent) => {
-            if (event.button !== MouseButton.LEFT) return;
-            event.stopPropagation();
-            pressed.current = "files";
-          }}
-          onMouseUp={(event: TuiMouseEvent) => {
-            event.stopPropagation();
-            if (event.button !== MouseButton.LEFT || pressed.current !== "files") return;
-            pressed.current = null;
-            cancelClick();
-            setAnchor(null);
-            onFiles();
-          }}>{"[Files]"}</text>
-        <text wrapMode="none" selectable={false} fg={anchor ? theme.text : theme.muted} bg={theme.panel}
-          style={{ width: Math.max(0, width - 9), height: 1, flexShrink: 0 }}>
-          {anchor ? " End · Esc" : clickPreview !== null ? ` Opening ${(painted.position ?? -1) + 1}` : pending ? loadingLabel : seriesHeading(position, commits.length, Math.max(0, width - 9), range)}
-        </text>
+          {...handlers("files", () => { cancel(); onFiles(); })}>{"[Files]"}</text>
+        <text wrapMode="none" selectable={false} fg={anchor ? theme.text : theme.muted}
+          style={{ width: Math.max(0, width - 7), height: 1, flexShrink: 0 }}
+          {...handlers("new", () => {
+            if (history.newCommits > 0 && !anchor && commits.at(-1)) {
+              cancel(); acknowledgeNewCommits(); requestCommit(commits.at(-1)!.sha, actions.notify, session);
+            }
+          })}>{clip(label, width - 7)}</text>
       </box>
-      <scrollbox ref={scroll} focused={false} scrollY={true}
+      {(["staged", "unstaged"] as const).map((kind) => {
+        const active = pending?.kind === "working" ? pending.value === kind : !pending && snapshot.review?.endsWith(kind === "staged" ? " staged changes" : " working tree");
+        const background = active ? theme.selectedHunk : hovered === kind ? theme.panelAlt : theme.panel;
+        return <text key={kind} id={`review-${kind}`} wrapMode="none" selectable={false}
+          fg={theme.text} bg={background} style={{ height: 1, flexShrink: 0 }}
+          {...handlers(kind, () => { cancel(); requestWorking(kind, actions.notify, session); })}>
+          {clip(` ${active ? "▸" : " "} ${kind === "staged" ? "Staged" : "Unstaged"} ${history[kind]}`, width)}
+        </text>;
+      })}
+      <scrollbox id="history-scroll" ref={scroll} focused={false} scrollY={true}
         style={{ flexGrow: 1, backgroundColor: theme.panel }}
         rootOptions={{ backgroundColor: theme.panel }} wrapperOptions={{ backgroundColor: theme.panel }}
         viewportOptions={{ backgroundColor: theme.panel }} contentOptions={{ backgroundColor: theme.panel }}
         verticalScrollbarOptions={{ visible: false }} horizontalScrollbarOptions={{ visible: false }}>
-        {commits.map((commit, index) => {
+        {history.hasMore && <text id="load-older" selectable={false} fg={theme.muted}
+          style={{ height: 1, flexShrink: 0 }} {...handlers("older", () => { if (!history.loading) onMore?.(); })}>
+          {history.loading ? " Loading older…" : " Load older…"}
+        </text>}
+        {start > 0 && <box style={{ height: start, flexShrink: 0 }} />}
+        {commits.slice(start, end).map((commit, local) => {
+          const index = start + local;
           const selected = isSelectedIndex(painted, index);
-          const background = anchor === commit.sha ? theme.accentMuted
-            : selected ? theme.selectedHunk
-            : hoveredCommit === commit.sha ? theme.panelAlt : theme.panel;
-          return (
-          <box key={commit.sha} id={rowId(index)}
+          const background = anchor === commit.sha ? theme.accentMuted : selected ? theme.selectedHunk
+            : hovered === commit.sha ? theme.panelAlt : theme.panel;
+          return <box key={commit.sha} id={`commit-log-row-${index}`}
             style={{ height: 1, flexShrink: 0, width: "100%", backgroundColor: background }}
-            onMouseOver={() => setHoveredCommit(commit.sha)}
-            onMouseOut={() => setHoveredCommit(null)}
-            onMouseDown={(event: TuiMouseEvent) => {
-              if (event.button !== MouseButton.LEFT) return;
-              event.stopPropagation();
-              event.preventDefault();
-              pressed.current = commit.sha;
-            }}
-            onMouseDrag={() => { pressed.current = null; cancelClick(); }}
-            onMouseUp={(event: TuiMouseEvent) => {
-              if (event.button !== MouseButton.LEFT) return;
-              event.stopPropagation();
-              if (pressed.current !== commit.sha) return;
-              pressed.current = null;
-              if (!event.isDragging) choose(commit.sha);
-            }}>
+            {...handlers(commit.sha, () => choose(commit.sha))}>
             <text wrapMode="none" selectable={false}
-              fg={hoveredCommit === commit.sha && selected ? theme.accent : theme.text} bg={background}>
+              fg={hovered === commit.sha && selected ? theme.accent : theme.text} bg={background}>
               {commitRow(commit, width, { active: index === painted.position, selected })}
             </text>
-          </box>
-          );
+          </box>;
         })}
+        {end < commits.length && <box style={{ height: commits.length - end, flexShrink: 0 }} />}
+        {commits.length === 0 && <text fg={theme.muted}>{history.loading ? " Loading history…" : " No commits in scope"}</text>}
       </scrollbox>
     </box>
   );
@@ -181,8 +222,8 @@ function toneColor(theme: ExtensionPaneProps["theme"], tone: Tone): string {
 }
 
 export function MessagePane({ width, height, theme }: ExtensionPaneProps): ReactNode {
-  const { commits, position, message } = useSyncExternalStore(subscribeSeries, seriesSnapshot);
-  const head = position === null ? undefined : commits[position];
+  const { commits, position, message, commit } = useSyncExternalStore(subscribeSeries, seriesSnapshot);
+  const head = commit ?? (position === null ? undefined : commits[position]);
   const rows =
     head === undefined || message === null ? [] : messageRows(head, message, width, height);
 

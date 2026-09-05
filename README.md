@@ -1,107 +1,94 @@
 # hunk-history
 
-Review Git history one commit at a time or apply an explicit inclusive range in
-[Hunk](https://hunk.dev). The commit list sits beside the diff, with the commit
-message above it. This project builds on
+Browse live Git history, review individual commits and inclusive ranges, and switch
+between staged and unstaged changes in [Hunk](https://hunk.dev). Built on
 [Sadick Mwakio's hunk-commit-log](https://github.com/sadick254/hunk-commit-log).
 
-Requires Hunk 0.19.0 or newer (extension API 6) and Git on PATH.
+Requires Hunk 0.19.0 or newer (extension API 6) and Git on PATH. The current checkout
+contains an **unreleased live-history trial**; version stays **0.0.2** until the
+operator has live-tested and approved the direction. No new release is authorized.
 
-## Review controls
+## Interaction
 
-- **Click a commit's SHA/subject** to review only that commit. **n / p** move
-  to the next/previous commit without wrapping.
-- **Files / Commits:** press **h** to swap the two views in one sidebar area.
-  The **Files** label in the commit header switches back to Hunk's file tree.
-  This is an extension-only switch, not native tabs. Commits defaults to 34 columns.
-- **Double-click either endpoint** to start a range. The anchor is highlighted;
-  the header temporarily shows **End · Esc**. Nothing loads yet.
-- **Click the other endpoint** to immediately load the inclusive range. Oldest-first
-  and newest-first work identically. Clicking the same endpoint loads one commit.
-- **Esc** cancels. Switching to Files or replacing the review also cancels the draft.
-- Single clicks highlight immediately with **Opening** feedback. Navigation waits
-  300 ms to distinguish a double-click; **Loading** then tracks the actual request.
-  Once a range is loaded, a single click returns to a single-commit review.
+- **Single-click a commit:** request its diff immediately. No double-click waiting period.
+- **Double-click either endpoint:** arm a range. **Click the other endpoint** to load
+  its inclusive net diff. Either direction works; equal endpoints show one commit.
+- The first click of a double-click can start loading its commit. Its completion,
+  including Hunk's full App remount, does not cancel the second click or armed range.
+- **Esc** cancels the gesture. Files/Commits switches and external review replacement
+  also cancel it. No Range button, unusual key combination, drag selection or Apply step.
+- **Staged / Unstaged:** two compact rows above history select those comparisons.
+  Counts are changed paths, not hunks; a partly staged file can count in both rows.
+  Unstaged includes untracked files. Zero is a valid empty review, not a disabled action.
+- **Files / Commits:** `h` swaps views in one sidebar. `[Files]` switches back to the
+  native file tree. Default history width is 34 columns; narrow terminals may hide it.
 
-No dragging, Shift-click, ellipsis menu or separate Apply action is required.
-The closing click highlights the requested range immediately with a **Loading** label.
-The diff remains the previously loaded review until the request succeeds; failure restores its
-selection. Selected backgrounds stay continuous during hover, including trailing row space.
+Requested selections paint immediately with `Loading`. The old diff remains until
+the reload succeeds; failures restore its selection. Reloads serialize and rapid
+navigation coalesces to the latest requested target. Session discovery uses this
+window's PID, never an arbitrary window on the same checkout.
 
-The commit header shows its position in the series, SHA and subject. The message
-pane shows the author, full timestamp with original UTC offset, and wrapped body.
-Theme roles distinguish identifiers, metadata and prose.
+## Live history and scope
 
-Initialize with a single-commit review:
+History browsing is independent of the loaded diff. By default it follows **HEAD**,
+ordered oldest first. New commits update the list without replacing a selected
+commit or pinned range. The existing header shows **N new**; click it to review the
+newest commit. A commit outside the current history scope still retains its loaded
+message and diff.
 
-```sh
-hunk show HEAD
-```
+History and staged/unstaged counts are checked asynchronously every 1.5 seconds,
+with serialized Git queries. Metadata is fetched in batches and only nearby rows
+are rendered. **Load older…** at the top fetches another page; `p` also fetches older
+history at the loaded edge. There is no total commit limit. `limit` is the page size
+(default 50, clamped to 1–500), not a cap on browsable history.
 
-Unrelated `hunk diff`, stash and patch reviews remain inert. An inclusive range
-selected from the commit pane keeps that series available for single-commit review.
-
-## Install
-
-```sh
-hunk extension install victor-software-house/hunk-history
-```
-
-Or try the checkout without installing it:
-
-```sh
-hunk show HEAD --extension /path/to/hunk-history
-```
-
-The extension id and configuration namespace are `hunk-history`.
-
-## Review scope
-
-The **Show commit review scope** command identifies which commits the list represents. For a branch
-review, set a range explicitly in the repository's `.hunk/config.toml`:
+The **Extensions** menu exposes **Choose history scope**: current branch, configured
+range (when present), or history through the selected commit (pinned). A configured
+scope remains explicit; an unavailable scope reports an error rather than silently
+broadening to unrelated history. Existing rows remain while a replacement loads or
+fails. A branch rewrite can move the loaded commit outside the list without changing
+its diff.
 
 ```toml
 [extension.hunk-history]
-range = "origin/main..HEAD"
+range = "origin/main..HEAD" # optional; otherwise browse HEAD
+limit = 50                # page size, not a total-history cap
 messageRows = 8
 ```
 
-The series is exactly that Git revision range, ordered oldest first. Open a
-commit inside it. An unavailable range or one excluding the opened commit shows
-an operator warning and only that commit; it never silently broadens to unrelated
-history. Leading-dash ranges are ignored rather than passed as Git options.
+Configuration is read at extension startup; restart Hunk after editing it.
 
-Without a configured range, the series is the most recent `limit` commits ending
-at the opened commit, explicitly labeled `recent N through SHA`. This does not
-change when a branch is pushed. `limit` defaults to 20 and is clamped to 1–500;
-it does not truncate an explicitly configured range.
+## Comparisons and commands
 
-```toml
-[extension.hunk-history]
-limit = 20
-messageRows = 8
-```
-
-The series stays fixed while stepping within it. Opening a commit outside it
-resolves another series. Configuration is read when the extension starts; restart
-Hunk after changing it.
-
-## Keys and message layout
+All extension commands appear in Hunk's **Extensions** menu, including unbound
+commands. No additional keyboard bindings are introduced by this trial.
 
 | Key | Command id | Action |
 |:--|:--|:--|
-| `n` | `hunk-history.next` | Next commit |
-| `p` | `hunk-history.previous` | Previous commit |
+| `n` / `p` | `hunk-history.next` / `.previous` | Next / previous commit; no wrap |
 | `h` | `hunk-history.toggle` | Switch Files / Commits |
-| `s` (override below) | `hunk-history.files` | Close Commits, toggle Files |
+| — | `hunk-history.files` | Close Commits, toggle Files |
 | `i` | `hunk-history.message` | Toggle commit message |
 | `I` | `hunk-history.expand` | Fit/collapse message |
-| — | `hunk-history.scope` | Show commit review scope |
+| — | `hunk-history.scope` | Choose history scope |
+| — | `hunk-history.refresh` | Refresh history and working-state counts |
+| — | `hunk-history.older` | Load an older history page |
+| — | `hunk-history.staged` / `.unstaged` | Review staged / unstaged changes |
+| — | `hunk-history.all` | Review net uncommitted changes from HEAD |
+| — | `hunk-history.through-head` | Selection's base through moving HEAD |
+| — | `hunk-history.through-worktree` | Selection's base through working tree |
 
-Remap command ids in the user config's `[keybindings]` table. `[` and `]` already
-belong to Hunk's hunk navigation and are not claimed by this extension.
+**Through HEAD** and **Through working tree** explicitly create live comparisons
+with Hunk watch enabled. The base is the oldest selected commit's parent, so the
+selection is inclusive. A normal clicked range stays pinned to concrete SHAs.
+Staged/unstaged rows are not fake commits or range endpoints. These controls only
+select reviews: they never stage, unstage, commit, fetch or modify repository files.
 
-To make **both `h` and `s` mutually exclusive**, add this to your Hunk user config:
+A range is a **net tree diff**, not concatenated patches. Merge topology can include
+effects not represented by the linear highlighted rows. Combined uncommitted changes
+are also a net comparison; staged and unstaged edits can cancel each other.
+
+To make native `s` exclusive with Commits, retain this explicit user-config override:
 
 ```toml
 [keybindings]
@@ -109,50 +96,59 @@ To make **both `h` and `s` mutually exclusive**, add this to your Hunk user conf
 "hunk-history.files" = "s"
 ```
 
-Hunk owns `s` by default; an extension cannot override it just by registering the
-same key. This explicit override sends `s` through the same controller as `h`.
-It closes Commits before toggling Files, including in non-commit reviews. Restart
-Hunk after configuring it. Without the extension (for example `--no-extensions`),
-this binding is unavailable; remove the override to restore the built-in shortcut.
-Other explicit host pane commands are not intercepted.
+Without the extension that binding is unavailable; remove it to restore native `s`.
+Other explicit host pane commands are not intercepted. `[` and `]` remain Hunk's
+hunk-navigation keys.
 
-`messageRows` sets the initial message height (3–60 rows). Drag its divider to
-resize it. `I` chooses the smallest available height among 8, 12, 18, 26, 36 and
-50 rows; longer messages report omitted lines. The message pane has no scrolling.
+The message pane shows the author, timestamp with original UTC offset, and body.
+`messageRows` sets its initial height (3–60). Drag the divider to resize it. `I` picks
+among 8, 12, 18, 26, 36 and 50 rows; longer messages report omitted lines. No message
+scrolling is introduced.
 
-## Boundaries
+## Install or live-test
 
-- A selected range compares the oldest selected commit's parent (or Git's empty
-  tree for a root commit) with the newest selected commit. It is a **net tree
-  diff**, not concatenated commit patches. Merge topology can include effects
-  not represented by a simple linear list of highlighted rows.
-- Hunk's review title supplies the reviewed ref; the extension API does not
-  expose it directly. Only Git repositories are supported.
-- Loading uses the Hunk session daemon, locating this window by PID. Requests
-  serialize and bursts coalesce. A failed reload clears cached session discovery
-  for the next user action; it does not automatically replay a failed request.
-- On narrow terminals Hunk can hide the side pane rather than squeeze the diff.
-  Widen the window to recover it.
+Install the approved release:
 
-## Development and approval
+```sh
+hunk extension install victor-software-house/hunk-history
+```
+
+Test this checkout **without replacing the installed release**, from a Git repository:
+
+```sh
+hunk show HEAD --extension /absolute/path/to/hunk-history
+```
+
+An explicit extension takes precedence over the installed copy with the same id;
+Hunk may report that the duplicate installed copy was skipped. The id and config
+namespace remain `hunk-history`. Start a new Hunk window after source changes; a
+session diff reload does not reload extension code.
+
+## Coding agents
+
+Read the bundled [Hunk History agent guide](skills/hunk-history/SKILL.md). It documents
+supported `hunk session reload`, `context` and `review` operations for pinned/live
+ranges and working states. Agents can load this file directly, or operators can
+register its directory with their agent's skill loader.
+
+**Hunk does not automatically inject this guide into an agent's context.** Its public
+extension API exposes UI commands, not agent instructions, custom session commands,
+or CLI subcommands. The UI command ids above are not remotely executable session
+commands. The guide uses only the CLI surface Hunk actually supports.
+
+## Development
 
 ```sh
 npm install
 npm run typecheck
 npm test
+git diff --check
 ```
 
-Node runs pure unit tests. The rendered pointer tests use the existing OpenTUI
-in-memory renderer under Bun (tested with Bun 1.4.0); OpenTUI's current native FFI
-is not available under Node. No second package manager or new dependency is added.
-The pointer tests exercise real double-clicks and releases in both endpoint orders,
-Escape, delayed single navigation, scrolling, drag rejection, failed loads and Files
-hover feedback. The production request queue uses only an injected Hunk CLI seam.
-Direct tests cover pane swap ordering. They do not touch a live review window.
+No production build: Hunk loads TypeScript directly and supplies React/OpenTUI.
+Node runs pure and disposable real-Git tests. Bun runs the existing OpenTUI pointer
+suite, including full-pane remounts, immediate dispatch, request ordering, scrolling,
+hover and failures. No new dependencies or test framework are needed.
 
-Hunk loads TypeScript directly; no production build is needed. React and OpenTUI
-remain development dependencies because Hunk supplies them to extensions.
-
-[Interaction plan and release decision](docs/interaction-plan.md): **0.0.2** is the
-approved patch release, distributed through Git tags and GitHub releases, not npm.
-Future releases require explicit approval.
+[Trial plan](docs/live-history-plan.md) · [Interaction decisions](docs/interaction-plan.md).
+Live operator approval and any version/release action remain separate gates.

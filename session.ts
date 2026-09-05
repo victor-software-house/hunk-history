@@ -85,7 +85,8 @@ export function resetSessionId(): void {
 /** One review the extension can ask the live Hunk window to load. */
 type ReviewTarget =
   | { kind: "commit"; value: string }
-  | { kind: "range"; value: string; selection: SeriesRange | null };
+  | { kind: "working"; value: "staged" | "unstaged" | "all" }
+  | { kind: "range"; value: string; selection: SeriesRange | null; live?: boolean };
 
 /** Replace this window's review with one target. */
 async function loadReview(target: ReviewTarget, deps: SessionDeps): Promise<string | null> {
@@ -95,9 +96,15 @@ async function loadReview(target: ReviewTarget, deps: SessionDeps): Promise<stri
   }
 
   const command = target.kind === "commit" ? "show" : "diff";
-  const result = await deps.run(["session", "reload", id, "--", command, target.value]);
+  const args = target.kind === "working"
+    ? target.value === "staged" ? ["--staged", "--watch"]
+      : target.value === "all" ? ["HEAD", "--watch"] : ["--watch"]
+    : target.kind === "range" && target.live
+      ? [target.value, "--watch"] : [target.value];
+  const result = await deps.run(["session", "reload", id, "--", command, ...args]);
   if (result === null) cachedSessionId = null;
-  const label = target.kind === "commit" ? target.value.slice(0, 8) : "the selected range";
+  const label = target.kind === "commit" ? target.value.slice(0, 8)
+    : target.kind === "working" ? `${target.value} changes` : "the selected range";
   return result === null ? `cannot load ${label}` : null;
 }
 
@@ -118,6 +125,26 @@ const pendingListeners = new Set<() => void>();
 /** Latest requested review, distinct from the successfully loaded series. */
 export function pendingReview(): ReviewTarget | null {
   return queued ?? inFlight;
+}
+
+/** The transform must match the request being loaded, not a newer queued click. */
+export function loadingReview(): ReviewTarget | null { return inFlight; }
+
+export function requestWorking(
+  value: "staged" | "unstaged" | "all",
+  report: (message: string, type?: "info" | "warning" | "error") => void,
+  deps: SessionDeps = { run: hunkRunner(), pid: process.pid },
+): void {
+  requestReview({ kind: "working", value }, report, deps);
+}
+
+export function requestComparison(
+  base: string,
+  through: "HEAD" | "worktree",
+  report: (message: string, type?: "info" | "warning" | "error") => void,
+  deps: SessionDeps = { run: hunkRunner(), pid: process.pid },
+): void {
+  requestReview({ kind: "range", value: through === "HEAD" ? `${base}..HEAD` : base, selection: null, live: true }, report, deps);
 }
 
 export function subscribePending(listener: () => void): () => void {

@@ -135,6 +135,8 @@ test("selection spans inclusively between explicit endpoints", () => {
   const range = selectedRange(snapshot, 2, 0);
 
   assert.deepEqual(range, {
+    anchorSha: SERIES[2]!.sha,
+    endpointSha: SERIES[0]!.sha,
     anchor: 2,
     endpoint: 0,
     start: 0,

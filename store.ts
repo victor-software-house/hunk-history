@@ -24,6 +24,8 @@ export interface CommitMessage {
 
 /** One inclusive contiguous selection in the oldest-first commit series. */
 export interface SeriesRange {
+  readonly anchorSha: string;
+  readonly endpointSha: string;
   readonly anchor: number;
   readonly endpoint: number;
   readonly start: number;
@@ -34,6 +36,10 @@ export interface SeriesRange {
 
 /** What the panes paint: the series, active endpoint, optional range, and message. */
 export interface SeriesSnapshot {
+  /** Raw host review title, kept independently of the history scope. */
+  readonly review?: string;
+  /** Loaded commit remains identifiable when outside the visible scope. */
+  readonly commit?: SeriesCommit | null;
   readonly commits: readonly SeriesCommit[];
   readonly scope?: string;
   /** Index into `commits`, or null when the review is not a commit-backed review. */
@@ -154,7 +160,6 @@ export function selectedRange(
   endpoint: number,
 ): SeriesRange | null {
   if (
-    snapshot.position === null ||
     anchor < 0 ||
     anchor >= snapshot.commits.length ||
     endpoint < 0 ||
@@ -173,12 +178,21 @@ export function selectedRange(
   }
 
   return {
+    anchorSha: snapshot.commits[anchor]!.sha,
+    endpointSha: snapshot.commits[endpoint]!.sha,
     anchor,
     endpoint,
     start,
     end,
     revisionRange: `${oldest.baseSha}..${newest.sha}`,
   };
+}
+
+/** Remap exact endpoints after history changes, never infer a commit from its parent. */
+export function remapRange(snapshot: SeriesSnapshot, range: SeriesRange): SeriesRange | null {
+  return selectedRange(snapshot,
+    snapshot.commits.findIndex((row) => row.sha === range.anchorSha),
+    snapshot.commits.findIndex((row) => row.sha === range.endpointSha));
 }
 
 /** Report whether one row belongs to the current inclusive range. */
@@ -193,6 +207,7 @@ export function publishRange(range: SeriesRange): void {
   publishSeries({
     ...snapshot,
     position: range.endpoint,
+    commit: null,
     range,
     message: null,
   });
@@ -217,6 +232,8 @@ function sameRange(left: SeriesRange | null, right: SeriesRange | null): boolean
   }
 
   return (
+    left.anchorSha === right.anchorSha &&
+    left.endpointSha === right.endpointSha &&
     left.anchor === right.anchor &&
     left.endpoint === right.endpoint &&
     left.start === right.start &&
@@ -227,6 +244,8 @@ function sameRange(left: SeriesRange | null, right: SeriesRange | null): boolean
 
 function sameSeries(left: SeriesSnapshot, right: SeriesSnapshot): boolean {
   return (
+    left.review === right.review &&
+    left.commit?.sha === right.commit?.sha &&
     left.position === right.position &&
     left.scope === right.scope &&
     sameRange(left.range, right.range) &&

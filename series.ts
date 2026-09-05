@@ -1,279 +1,94 @@
-import { execFileSync } from "node:child_process";
-import { basename } from "node:path";
+import { execFile } from "node:child_process";
 import type { CommitMessage, SeriesCommit, SeriesSnapshot } from "./store.ts";
 
-/** The reviewed commit, and the series it belongs to. */
-export interface ReviewSeries {
-  repoName: string;
-  scope?: string;
-  commits: SeriesCommit[];
-  /** Index of the reviewed commit in `commits`. */
-  position: number;
-}
-
-/** Which commits to gather: a range to prefer, and a ceiling on the rest. */
-export interface SeriesOptions {
-  range: string | null;
-  limit: number;
-}
-
-/** One git invocation: trimmed stdout, or null for any failure. */
-export type GitRunner = (args: readonly string[]) => string | null;
-
-/** Commits with no configured range: the N ending at the reviewed commit. */
-export const DEFAULT_LIMIT = 20;
-const MAX_LIMIT = 500;
-/** Rows the message pane starts with, and the range a reviewer may ask for. */
+export type GitRunner = (args: readonly string[]) => Promise<string | null>;
+export interface SeriesOptions { range: string | null; limit: number }
+export const DEFAULT_LIMIT = 50;
 export const DEFAULT_MESSAGE_ROWS = 8;
-const MIN_MESSAGE_ROWS = 3;
-const MAX_MESSAGE_ROWS = 60;
-const GIT_TIMEOUT_MS = 2_000;
-/**
- * Run git in one working directory.
- *
- * Both streams are captured rather than inherited: the renderer owns the
- * terminal, so a single line of git progress on stderr would corrupt the frame.
- */
+
+/** Async, bounded subprocesses never hold the terminal's rendering thread. */
 export function gitRunner(cwd: string): GitRunner {
-  return (args) => {
-    try {
-      return execFileSync("git", args, {
-        cwd,
-        encoding: "utf8",
-        timeout: GIT_TIMEOUT_MS,
-        stdio: ["ignore", "pipe", "pipe"],
-        maxBuffer: 8 * 1024 * 1024,
-      }).trim();
-    } catch {
-      return null;
-    }
-  };
+  return (args) => new Promise((resolve) => {
+    const child = execFile("git", [...args], {
+      cwd, encoding: "utf8", timeout: 5_000, maxBuffer: 8 * 1024 * 1024,
+      env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" },
+    }, (error, stdout) => resolve(error ? null : stdout.trimEnd()));
+    child.stdin?.end();
+  });
 }
 
-/** Read one commit, or null when the rev names nothing. */
-function readCommit(git: GitRunner, rev: string): SeriesCommit | null {
-  const line = git([
-    "log",
-    "-1",
-    "--no-patch",
-    "--format=%H%x00%h%x00%s%x00%P",
-    rev,
-    "--",
-  ]);
-  if (line === null) {
-    return null;
-  }
-
-  const [sha, abbrev, subject, parents = ""] = line.split("\0");
-  if (sha === undefined || abbrev === undefined || subject === undefined) {
-    return null;
-  }
-
-  const firstParent = parents.trim().split(/\s+/)[0] || null;
-  const baseSha = firstParent ?? git(["hash-object", "-t", "tree", "--stdin"]);
-  return { sha, abbrev, subject, baseSha };
-}
-
-/**
- * Read one commit's message, or null when the rev names nothing.
- *
- * Only ever asked for the reviewed commit: the pane shows one message, and a
- * body per commit would cost a git call per row for text nothing renders.
- */
-export function readMessage(git: GitRunner, rev: string): CommitMessage | null {
-  const text = git([
-    "log",
-    "-1",
-    "--no-patch",
-    "--format=%an%x00%aI%x00%b",
-    rev,
-    "--",
-  ]);
-  if (text === null) {
-    return null;
-  }
-
-  const [author, timestamp, body] = text.split("\0");
-  if (author === undefined || timestamp === undefined) {
-    return null;
-  }
-
-  return { author, timestamp, body: (body ?? "").trim() };
-}
-
-/** Read every commit a revision list names, oldest first. */
-function readCommits(git: GitRunner, shas: string): SeriesCommit[] {
-  return shas === ""
-    ? []
-    : shas.split("\n").flatMap((sha) => {
-        const commit = readCommit(git, sha);
-        return commit === null ? [] : [commit];
-      });
-}
-
-/**
- * A range from configuration, or null when there is none to trust.
- *
- * Repository config can set `[extension.hunk-history]`, so this string is
- * untrusted input that ends up in a git argument list. No shell is involved,
- * which leaves one way to misread it: a leading dash would make git treat the
- * value as an option rather than a range.
- */
 export function configuredRange(config: unknown): string | null {
   const value = (config as { range?: unknown } | undefined)?.range;
-  if (typeof value !== "string") {
-    return null;
-  }
-
+  if (typeof value !== "string") return null;
   const range = value.trim();
-  return range === "" || range.startsWith("-") ? null : range;
+  return range && !range.startsWith("-") ? range : null;
 }
 
-/**
- * The rows the message pane starts with.
- *
- * Hunk keeps a dragged pane size in session state and forgets it on quit, so a
- * reviewer whose commits carry long bodies would drag the pane taller at every
- * launch. The default stays small: a one-line commit should not cost the diff
- * eight rows.
- */
-export function configuredMessageRows(config: unknown): number {
-  const value = (config as { messageRows?: unknown } | undefined)?.messageRows;
-  if (typeof value !== "number" || !Number.isFinite(value)) {
-    return DEFAULT_MESSAGE_ROWS;
-  }
-
-  return Math.min(Math.max(Math.trunc(value), MIN_MESSAGE_ROWS), MAX_MESSAGE_ROWS);
-}
-
-/** A commit count from configuration, clamped to something a sidebar can hold. */
 export function configuredLimit(config: unknown): number {
   const value = (config as { limit?: unknown } | undefined)?.limit;
-  if (typeof value !== "number" || !Number.isFinite(value)) {
-    return DEFAULT_LIMIT;
-  }
-
-  return Math.min(Math.max(Math.trunc(value), 1), MAX_LIMIT);
+  return typeof value === "number" && Number.isFinite(value)
+    ? Math.min(500, Math.max(1, Math.trunc(value))) : DEFAULT_LIMIT;
 }
 
-/** A configured scope never silently broadens into unrelated recent history. */
-function buildSeries(
-  git: GitRunner,
-  head: SeriesCommit,
-  options: SeriesOptions,
-  log: (message: string) => void,
-): { commits: SeriesCommit[]; scope: string } {
-  if (options.range !== null) {
-    const shas = git(["rev-list", "--reverse", options.range, "--"]);
-    const configured = readCommits(git, shas ?? "");
-    if (configured.some((commit) => commit.sha === head.sha)) {
-      return { commits: configured, scope: options.range };
-    }
-    log(`Cannot use range "${options.range}" for ${head.abbrev}; showing only the opened commit`);
-    return { commits: [head], scope: `opened ${head.abbrev} (scope unavailable)` };
-  }
-
-  const recent = git(["rev-list", "-n", String(options.limit), head.sha, "--"]);
-  const commits = readCommits(git, (recent ?? "").split("\n").reverse().join("\n"));
-  return {
-    commits: commits.length === 0 ? [head] : commits,
-    scope: `recent ${options.limit} through ${head.abbrev}`,
-  };
+export function configuredMessageRows(config: unknown): number {
+  const value = (config as { messageRows?: unknown } | undefined)?.messageRows;
+  return typeof value === "number" && Number.isFinite(value)
+    ? Math.min(60, Math.max(3, Math.trunc(value))) : DEFAULT_MESSAGE_ROWS;
 }
 
-/**
- * The series behind one review title, or null when the review is not one commit.
- *
- * Hunk's git backend titles a `show` review `<repo-name> show <ref>` and titles
- * a working-tree, stash, or patch review something else, so the title is what
- * says whether a commit series is even the right frame for what is on screen.
- * Nothing in the extension API reports the reviewed ref directly.
- */
-export function resolveSeries(
-  title: string,
-  git: GitRunner,
-  options: SeriesOptions,
-  log: (message: string) => void,
-  anchor: readonly SeriesCommit[] = [],
-  anchorScope?: string,
-): ReviewSeries | null {
-  const repoRoot = git(["rev-parse", "--show-toplevel"]);
-  if (repoRoot === null) {
-    return null;
+/** One metadata query per page, newest first; no per-row Git processes. */
+export async function readPage(git: GitRunner, ref: string | readonly string[], limit: number, skip = 0): Promise<SeriesCommit[] | null> {
+  const revisions = typeof ref === "string" ? [ref] : ref;
+  if (revisions.length === 0 || revisions.some((value) => !value || value.startsWith("-"))) return null;
+  const text = await git(["log", "--no-show-signature", "--no-decorate", "--no-color", `--max-count=${limit}`, `--skip=${skip}`, "--format=%H%x00%h%x00%s%x00%P", ...revisions, "--"]);
+  if (text === null) return null;
+  if (!text) return [];
+  let emptyTree: string | null = null;
+  const commits: SeriesCommit[] = [];
+  for (const line of text.split("\n")) {
+    const [sha, abbrev, subject, parents = ""] = line.split("\0");
+    if (!sha || !abbrev || subject === undefined) return null;
+    const parent = parents.split(" ")[0];
+    if (!parent && !emptyTree) emptyTree = await git(["hash-object", "-t", "tree", "--stdin"]);
+    commits.push({ sha, abbrev, subject, baseSha: parent || emptyTree });
   }
-
-  const repoName = basename(repoRoot);
-  const prefix = `${repoName} show `;
-  if (!title.startsWith(prefix)) {
-    return null;
-  }
-
-  const ref = title.slice(prefix.length);
-  const head = readCommit(git, ref);
-  if (head === null) {
-    log(`cannot read a commit for ref "${ref}"`);
-    return null;
-  }
-
-  // A step within the series on screen keeps that series. Rebuilding it from
-  // the commit just loaded would re-anchor it on every step, so walking back
-  // through a branch would report 20/20 at each stop and the rows above the
-  // reviewed commit would change under the reviewer.
-  const held = anchor.findIndex((commit) => commit.sha === head.sha);
-  if (held >= 0) {
-    return { repoName, commits: [...anchor], position: held, scope: anchorScope };
-  }
-
-  const { commits, scope } = buildSeries(git, head, options, log);
-  const found = commits.findIndex((commit) => commit.sha === head.sha);
-  return found < 0
-    ? { repoName, commits: [head], position: 0, scope }
-    : { repoName, commits, position: found, scope };
+  return commits;
 }
 
-/** The review header line: where in the series this commit is, and what it does. */
-export function seriesTitle(review: ReviewSeries): string {
-  const head = review.commits[review.position];
-  if (head === undefined) {
-    return review.repoName;
-  }
-
-  const place = `${review.position + 1}/${review.commits.length}`;
-  return `${review.repoName} ${place} ${head.abbrev} ${head.subject}`;
+export async function readMessage(git: GitRunner, ref: string): Promise<CommitMessage | null> {
+  if (!ref || ref.startsWith("-")) return null;
+  const text = await git(["log", "-1", "--no-show-signature", "--no-decorate", "--no-color", "--format=%an%x00%aI%x00%b", ref, "--"]);
+  if (text === null) return null;
+  const [author, timestamp, body = ""] = text.split("\0");
+  return author !== undefined && timestamp !== undefined ? { author, timestamp, body: body.trim() } : null;
 }
 
-/** Recognize the concrete range this extension most recently asked Hunk to load. */
-export function resolveRangeReview(
-  title: string,
-  git: GitRunner,
-  snapshot: SeriesSnapshot,
-): { repoName: string } | null {
-  if (snapshot.range === null || snapshot.position === null) {
-    return null;
+/** Porcelain -z keeps renamed paths and unusual filenames out of the counter grammar. */
+export async function readWorktree(git: GitRunner): Promise<{ staged: number; unstaged: number } | null> {
+  const text = await git(["status", "--porcelain=v1", "-z", "--untracked-files=normal"]);
+  if (text === null) return null;
+  let staged = 0;
+  let unstaged = 0;
+  const entries = text.split("\0");
+  for (let i = 0; i < entries.length; i++) {
+    const entry = entries[i];
+    if (!entry) continue;
+    const x = entry[0], y = entry[1];
+    if (x === "?" && y === "?") { unstaged++; continue; }
+    if (x !== " " && x !== "!") staged++;
+    if (y !== " " && y !== "!") unstaged++;
+    if (x === "R" || x === "C" || y === "R" || y === "C") i++;
   }
-
-  const repoRoot = git(["rev-parse", "--show-toplevel"]);
-  if (repoRoot === null) {
-    return null;
-  }
-
-  const repoName = basename(repoRoot);
-  return title === `${repoName} ${snapshot.range.revisionRange}` ? { repoName } : null;
+  return { staged, unstaged };
 }
 
-/** Describe an inclusive selection without exposing its long concrete Git range. */
+export function seriesTitle(repoName: string, snapshot: SeriesSnapshot): string {
+  const head = snapshot.commit ?? snapshot.commits[snapshot.position ?? -1];
+  return head ? `${repoName} ${head.abbrev} ${head.subject}` : repoName;
+}
+
 export function rangeTitle(repoName: string, snapshot: SeriesSnapshot): string {
   const range = snapshot.range;
-  if (range === null) {
-    return repoName;
-  }
-
-  const oldest = snapshot.commits[range.start];
-  const newest = snapshot.commits[range.end];
-  if (!oldest || !newest) {
-    return repoName;
-  }
-
-  const place = `${range.start + 1}–${range.end + 1}/${snapshot.commits.length}`;
-  return `${repoName} ${place} ${oldest.abbrev}…${newest.abbrev}`;
+  if (!range) return repoName;
+  return `${repoName} ${snapshot.commits[range.start]?.abbrev}…${snapshot.commits[range.end]?.abbrev}`;
 }

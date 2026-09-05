@@ -1,84 +1,72 @@
-import type { ExtensionPaneControls, HunkExtensionAPI } from "hunkdiff/extension";
+import type { ExtensionCommandContext, ExtensionPaneControls, HunkExtensionAPI } from "hunkdiff/extension";
 import { CommitLogPane, MessagePane } from "./pane.tsx";
-import {
-  configuredLimit,
-  configuredMessageRows,
-  configuredRange,
-  gitRunner,
-  readMessage,
-  resolveRangeReview,
-  resolveSeries,
-  rangeTitle,
-  seriesTitle,
-  type SeriesOptions,
-} from "./series.ts";
-import { pendingCommit, pendingRange, requestCommit } from "./session.ts";
+import { configuredLimit, configuredMessageRows, configuredRange, gitRunner, readMessage, readPage, rangeTitle, seriesTitle } from "./series.ts";
+import { loadingReview, pendingCommit, requestCommit, requestWorking, requestComparison } from "./session.ts";
+import { HistoryController, historySnapshot, cancelHistoryGesture } from "./history.ts";
 import {
   COLLAPSED_MESSAGE_PANE,
-  EMPTY_SERIES,
   EXPANDED_RUNGS,
   expandedPane,
   messagePanes,
   neighbour,
-  publishRange,
   publishSeries,
+  remapRange,
   seriesSnapshot,
 } from "./store.ts";
 import { createElement } from "react";
 import { showSidebar, toggleFiles } from "./sidebar.ts";
 
 export default function registerCommitLog(hunk: HunkExtensionAPI): void {
-  hunk.events.on("hunk-history:files", (_event, ctx) => showSidebar(ctx.panes, "files"));
+  hunk.events.on("hunk-history:files", (_event, ctx) => {
+    cancelHistoryGesture();
+    showSidebar(ctx.panes, "files");
+  });
+  const configured = configuredRange(hunk.config);
+  const history = new HistoryController({ range: configured, limit: configuredLimit(hunk.config) });
 
-  const options: SeriesOptions = {
-    range: configuredRange(hunk.config),
-    limit: configuredLimit(hunk.config),
-  };
-
-  hunk.transformChangeset((changeset, ctx) => {
-    // A throwing transform costs the reviewer the whole changeset, so every
-    // failure here degrades to the review Hunk built without us.
+  hunk.transformChangeset(async (changeset, ctx) => {
     try {
+      if (!await history.connect(ctx.cwd)) return changeset;
+      const repo = history.repoName;
+      const title = changeset.title;
+      const request = loadingReview();
+      const own = request && (request.kind === "commit" ? title === `${repo} show ${request.value}`
+        : request.kind === "range" ? title === `${repo} ${request.value}`
+        : title === `${repo} ${request.value === "staged" ? "staged changes" : request.value === "all" ? "HEAD" : "working tree"}`);
+      const old = seriesSnapshot();
+      if (!own && old.review !== title) cancelHistoryGesture();
       const git = gitRunner(ctx.cwd);
+      if (title.startsWith(`${repo} show `)) {
+        const ref = title.slice(`${repo} show `.length);
+        const commit = (await readPage(git, ref, 1))?.[0];
+        if (!commit) return changeset;
+        const message = await readMessage(git, commit.sha);
+        const snapshot = seriesSnapshot();
+        const position = snapshot.commits.findIndex((row) => row.sha === commit.sha);
+        publishSeries({ ...snapshot, review: title, commit, position: position < 0 ? null : position, range: null, message });
+        return { ...changeset, title: seriesTitle(repo, seriesSnapshot()) };
+      }
       const snapshot = seriesSnapshot();
-      const requested = pendingRange();
-      const candidate = requested === null ? snapshot : {
-        ...snapshot, range: requested, position: requested.endpoint, message: null,
-      };
-      const rangeReview = resolveRangeReview(changeset.title, git, candidate);
-      if (rangeReview !== null) {
-        if (requested !== null) publishRange(requested);
-        return { ...changeset, title: rangeTitle(rangeReview.repoName, candidate) };
-      }
-
-      const review = resolveSeries(
-        changeset.title,
-        git,
-        options,
-        (message) => ctx.notify(message, "warning"),
-        snapshot.commits,
-        snapshot.scope,
-      );
-      if (review === null) {
-        publishSeries(EMPTY_SERIES);
-        return changeset;
-      }
-
-      const head = review.commits[review.position];
-      publishSeries({
-        commits: review.commits,
-        scope: review.scope,
-        position: review.position,
-        range: null,
-        message: head === undefined ? null : readMessage(git, head.sha),
-      });
-      return { ...changeset, title: seriesTitle(review) };
+      const requestedRange = own && request?.kind === "range" ? request.selection : null;
+      const heldRange = title === snapshot.review ? snapshot.range : null;
+      const range = requestedRange ?? heldRange;
+      const selection = range ? remapRange(snapshot, range) : null;
+      publishSeries({ ...snapshot, review: title, commit: null, position: selection?.endpoint ?? null, range: selection, message: null });
+      return selection ? { ...changeset, title: rangeTitle(repo, seriesSnapshot()) } : changeset;
     } catch (error) {
-      publishSeries(EMPTY_SERIES);
-      hunk.log(`failed to resolve the commit series: ${String(error)}`);
+      hunk.log(`failed to resolve history: ${String(error)}`);
       return changeset;
     }
   });
+
+  const chooseScope = async (ctx: ExtensionCommandContext) => {
+    const snapshot = seriesSnapshot();
+    const labels = ["Current branch (live)", ...(configured ? [`Configured: ${configured}`] : []),
+      ...(snapshot.commit ? ["History through selected commit (pinned)"] : [])];
+    const choice = await ctx.dialogs.select({ title: "History scope", options: labels });
+    if (choice === null) return;
+    await history.scope(choice === labels[0] ? "HEAD" : choice.startsWith("Configured:") ? configured! : snapshot.commit!.sha);
+  };
 
   hunk.registerPane({
     id: "commits",
@@ -88,10 +76,11 @@ export default function registerCommitLog(hunk: HunkExtensionAPI): void {
     defaultOpen: false,
     // Hunk drops a left pane that would squeeze the diff below its minimum, so
     // the review keeps its width on a narrow terminal and loses this column.
-    available: () => seriesSnapshot().position !== null,
+    available: () => historySnapshot().root !== null,
     component: (props) => createElement(CommitLogPane, {
       ...props,
       onFiles: () => hunk.events.emit("hunk-history:files", null),
+      onMore: () => { void history.refresh(true); },
     }),
   });
 
@@ -126,20 +115,37 @@ export default function registerCommitLog(hunk: HunkExtensionAPI): void {
   }
 
   hunk.registerCommand({ id: "toggle", title: "Switch Files / Commits", key: "h" }, (ctx) => {
-    if (seriesSnapshot().position === null) {
-      ctx.notify("Open a commit review to browse its history", "info");
+    if (historySnapshot().root === null) {
+      ctx.notify("History requires a Git repository", "info");
       return;
     }
+    cancelHistoryGesture();
     showSidebar(ctx.panes, ctx.panes.isOpen("commits") ? "files" : "commits");
   });
 
   hunk.registerCommand({ id: "files", title: "Toggle Files exclusively" }, (ctx) => {
+    cancelHistoryGesture();
     toggleFiles(ctx.panes);
   });
 
-  hunk.registerCommand({ id: "scope", title: "Show commit review scope" }, (ctx) => {
-    ctx.notify(seriesSnapshot().scope ?? "Opened commit", "info");
-  });
+  hunk.registerCommand({ id: "scope", title: "Choose history scope" }, chooseScope);
+  hunk.registerCommand({ id: "refresh", title: "Refresh commit history" }, async () => { await history.refresh(); });
+  hunk.registerCommand({ id: "older", title: "Load older commits" }, async () => { await history.refresh(true); });
+  for (const value of ["staged", "unstaged", "all"] as const) {
+    hunk.registerCommand({ id: value, title: `Review ${value === "all" ? "all uncommitted changes" : value + " changes"}` }, (ctx) => {
+      cancelHistoryGesture();
+      requestWorking(value, ctx.notify);
+    });
+  }
+  for (const through of ["HEAD", "worktree"] as const) {
+    hunk.registerCommand({ id: `through-${through.toLowerCase()}`, title: `Review from selection through ${through === "HEAD" ? "HEAD (live)" : "working tree (live)"}` }, (ctx) => {
+      const snapshot = seriesSnapshot();
+      const base = snapshot.range ? snapshot.range.revisionRange.split("..")[0] : snapshot.commit?.baseSha;
+      if (!base) { ctx.notify("Select a commit or range first", "info"); return; }
+      cancelHistoryGesture();
+      requestComparison(base, through, ctx.notify);
+    });
+  }
 
   let expanded = false;
 
@@ -178,7 +184,7 @@ export default function registerCommitLog(hunk: HunkExtensionAPI): void {
   // that fit the last one is the wrong pane to leave open.
   hunk.on("changeset_loaded", (_event, ctx) => {
     if (ctx.panes.isOpen("commits")) {
-      showSidebar(ctx.panes, seriesSnapshot().position === null ? "files" : "commits");
+      showSidebar(ctx.panes, historySnapshot().root === null ? "files" : "commits");
     }
     if (expanded && hasMessage()) {
       showMessageAt(ctx, true);
@@ -191,13 +197,17 @@ export default function registerCommitLog(hunk: HunkExtensionAPI): void {
     { id: "next", title: "Next commit in the series", key: "n", delta: 1, edge: "newest" },
     { id: "previous", title: "Previous commit in the series", key: "p", delta: -1, edge: "oldest" },
   ] as const) {
-    hunk.registerCommand({ id: step.id, title: step.title, key: step.key }, (ctx) => {
+    hunk.registerCommand({ id: step.id, title: step.title, key: step.key }, async (ctx) => {
       const snapshot = seriesSnapshot();
       if (snapshot.position === null) {
         return;
       }
 
-      const target = neighbour(snapshot, step.delta, pendingCommit());
+      let target = neighbour(snapshot, step.delta, pendingCommit());
+      if (target === null && step.delta === -1 && historySnapshot().hasMore) {
+        await history.refresh(true);
+        target = neighbour(seriesSnapshot(), step.delta, pendingCommit());
+      }
       if (target === null) {
         ctx.notify(`already at the ${step.edge} commit in the series`, "info");
         return;
@@ -212,6 +222,9 @@ export default function registerCommitLog(hunk: HunkExtensionAPI): void {
   // Opening the pane reveals the area, which `defaultOpen` alone does not do,
   // so the commit list is there at the width a terminal usually has.
   hunk.on("startup", (_event, ctx) => {
-    if (seriesSnapshot().position !== null) showSidebar(ctx.panes, "commits");
+    if (historySnapshot().root !== null) showSidebar(ctx.panes, "commits");
+    history.start();
   });
+  hunk.on("session_reload", () => { void history.refresh(); });
+  hunk.on("shutdown", () => history.stop());
 }
