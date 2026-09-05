@@ -11,13 +11,17 @@ Requires Hunk 0.19.0 or newer (extension API 6) and Git on PATH.
 
 - **Click a commit's SHA/subject** to review only that commit. **n / p** move
   to the next/previous commit without wrapping.
-- **Start / End** beside each commit set draft endpoints. The chosen hashes
-  remain visible above the list, including while scrolling. They do not load
-  a diff or change the applied selection.
-- **Apply** loads the inclusive range between those endpoints. Either order
-  works. Equal endpoints load one commit. Missing endpoints show a notification.
-- **Clear** removes the draft endpoints and, when a range is applied, returns
-  to its active endpoint as a single-commit review.
+- **Files / Commits:** press **h** to swap the two views in one sidebar area.
+  The **Files** label in the commit header switches back to Hunk's file tree.
+  This is an extension-only switch, not native tabs. Commits defaults to 34 columns.
+- **Range actions:** right-click a commit, click **⋯** for the active commit, or
+  use the **Commit range actions** command. Hunk owns the themed modal and Escape.
+- **Start here / End here** set draft endpoints without loading a diff. Their
+  hashes appear in the menu title, not in permanent fields above the list.
+- **Apply** appears when both endpoints exist. Either order works; equal
+  endpoints load one commit.
+- **Clear range** removes draft endpoints and returns an applied or pending
+  range to the active loaded commit.
 
 No dragging, Shift-click, or persistent selection mode is required. Applied
 ranges are labeled separately from draft endpoints. Failed loads retain the
@@ -52,7 +56,7 @@ The extension id and configuration namespace are `hunk-history`.
 
 ## Review scope
 
-The **Scope** line identifies which commits the list represents. For a branch
+The **Show scope** menu action identifies which commits the list represents. For a branch
 review, set a range explicitly in the repository's `.hunk/config.toml`:
 
 ```toml
@@ -87,9 +91,10 @@ Hunk after changing it.
 |:--|:--|:--|
 | `n` | `hunk-history.next` | Next commit |
 | `p` | `hunk-history.previous` | Previous commit |
-| `h` | `hunk-history.toggle` | Toggle commit list |
+| `h` | `hunk-history.toggle` | Switch Files / Commits |
 | `i` | `hunk-history.message` | Toggle commit message |
 | `I` | `hunk-history.expand` | Fit/collapse message |
+| — | `hunk-history.range` | Commit range actions |
 
 Remap command ids in the user config's `[keybindings]` table. `[` and `]` already
 belong to Hunk's hunk navigation and are not claimed by this extension.
@@ -123,9 +128,11 @@ npm test
 Node runs pure unit tests. The rendered pointer tests use the existing OpenTUI
 in-memory renderer under Bun (tested with Bun 1.4.0); OpenTUI's current native FFI
 is not available under Node. No second package manager or new dependency is added.
-The pointer tests exercise actual Start/End, Apply/Clear, single-commit clicks,
-release outside the list, and scrolling through the production request queue,
-with only the Hunk CLI seam injected. They do not touch a live review window.
+The pointer tests exercise the compact header, full-width rows, Files affordance,
+menu dispatch, Apply/Clear, single-commit clicks, release outside the list, and
+scrolling through the production request queue, with the Hunk CLI and modal-answer
+seams injected. Direct tests cover cancellation, stale answers, endpoint rules and
+pane swap ordering. They do not touch a live review window.
 
 Hunk loads TypeScript directly; no production build is needed. React and OpenTUI
 remain development dependencies because Hunk supplies them to extensions.

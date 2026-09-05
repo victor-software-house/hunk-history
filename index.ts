@@ -24,8 +24,15 @@ import {
   publishSeries,
   seriesSnapshot,
 } from "./store.ts";
+import { createElement } from "react";
+import { showRangeActions, type RangeDraft } from "./range-actions.ts";
+import { showSidebar } from "./sidebar.ts";
 
 export default function registerCommitLog(hunk: HunkExtensionAPI): void {
+  const draft: RangeDraft = { start: null, end: null };
+  hunk.events.on<string>("hunk-history:actions", (sha, ctx) => showRangeActions(sha, draft, ctx));
+  hunk.events.on("hunk-history:files", (_event, ctx) => showSidebar(ctx.panes, "files"));
+
   const options: SeriesOptions = {
     range: configuredRange(hunk.config),
     limit: configuredLimit(hunk.config),
@@ -80,12 +87,16 @@ export default function registerCommitLog(hunk: HunkExtensionAPI): void {
     id: "commits",
     title: "Commits",
     placement: "left",
-    width: { preferred: 48, min: 32 },
-    defaultOpen: true,
+    width: { preferred: 34, min: 22 },
+    defaultOpen: false,
     // Hunk drops a left pane that would squeeze the diff below its minimum, so
     // the review keeps its width on a narrow terminal and loses this column.
     available: () => seriesSnapshot().position !== null,
-    component: CommitLogPane,
+    component: (props) => createElement(CommitLogPane, {
+      ...props,
+      onFiles: () => hunk.events.emit("hunk-history:files", null),
+      onActions: (sha: string) => hunk.events.emit("hunk-history:actions", sha),
+    }),
   });
 
   const hasMessage = () => seriesSnapshot().message !== null;
@@ -118,8 +129,18 @@ export default function registerCommitLog(hunk: HunkExtensionAPI): void {
     });
   }
 
-  hunk.registerCommand({ id: "toggle", title: "Toggle the commit list", key: "h" }, (ctx) => {
-    ctx.panes.toggle("commits");
+  hunk.registerCommand({ id: "toggle", title: "Switch Files / Commits", key: "h" }, (ctx) => {
+    if (seriesSnapshot().position === null) {
+      ctx.notify("Open a commit review to browse its history", "info");
+      return;
+    }
+    showSidebar(ctx.panes, ctx.panes.isOpen("commits") ? "files" : "commits");
+  });
+
+  hunk.registerCommand({ id: "range", title: "Commit range actions" }, (ctx) => {
+    const snapshot = seriesSnapshot();
+    const commit = snapshot.position === null ? undefined : snapshot.commits[snapshot.position];
+    if (commit) return showRangeActions(commit.sha, draft, ctx);
   });
 
   let expanded = false;
@@ -158,6 +179,9 @@ export default function registerCommitLog(hunk: HunkExtensionAPI): void {
   // A step to another commit brings a message of another length, so the rung
   // that fit the last one is the wrong pane to leave open.
   hunk.on("changeset_loaded", (_event, ctx) => {
+    if (ctx.panes.isOpen("commits")) {
+      showSidebar(ctx.panes, seriesSnapshot().position === null ? "files" : "commits");
+    }
     if (expanded && hasMessage()) {
       showMessageAt(ctx, true);
     }
@@ -190,6 +214,6 @@ export default function registerCommitLog(hunk: HunkExtensionAPI): void {
   // Opening the pane reveals the area, which `defaultOpen` alone does not do,
   // so the commit list is there at the width a terminal usually has.
   hunk.on("startup", (_event, ctx) => {
-    ctx.panes.open("commits");
+    if (seriesSnapshot().position !== null) showSidebar(ctx.panes, "commits");
   });
 }

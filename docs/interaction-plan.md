@@ -1,33 +1,35 @@
 # Commit review interaction
 
-## Approved work
+## Operator decisions
 
-Replace drag/Shift-dependent range selection with explicit Start/End controls and Apply/Clear.
-Keep single-commit clicks and next/previous navigation. Show the configured review scope; do not
-silently replace an invalid configured range with unrelated history. Failed range loads must leave
-the loaded selection and message unchanged. Verify actual rendered pointer interaction as well as
-store and CLI behavior.
+- Preserve explicit Start/End and Apply/Clear logic, single-commit clicks and next/previous
+  navigation. Failed loads must retain the loaded selection and message.
+- The first functional form was rejected: repeated row buttons and five header rows waste space.
+  Use a single themed header, full-width non-wrapping rows and contextual controls instead.
+- Keep the correction extension-only. Hunk has no shared-sidebar tab contribution API; swap
+  Files and Commits rather than changing the host or copying its file tree.
+- Commit and push for review, but do not bump or publish until final-shape approval. Any later
+  authorized bump is at most patch. Keep version 0.0.1 unchanged.
 
-## Release gate
+## Implementation
 
-Operator decision: push the implementation for final-shape review, but do not bump the version or
-publish until explicitly approved. Any approved bump is at most patch. Keep version 0.0.1 unchanged.
+- Commits defaults to 34 columns (22 minimum), matching Hunk's standard sidebar sizing.
+- `h` swaps Files and Commits; the Files header affordance returns to the host file tree.
+  Close the previous pane before opening the next. Start in Commits only for a commit review.
+  Other host commands can still explicitly open panes; this extension does not intercept them.
+- Right-click a row or use the header's `⋯` / command palette for Hunk's native selector.
+  Endpoint hashes, Apply/Clear and scope are contextual, not permanent pane chrome.
+- Use the event bus for fresh review-generation controls; do not retain dialog contexts.
+  Cancelled or stale menu answers do not modify the draft.
+- Requested and loaded ranges remain separate. Publish a range only after its matching diff loads.
+- Invalid configured ranges warn and restrict the series to the opened commit, never unrelated
+  history. Message-pane behavior is unchanged.
 
-## Implementation and proof
+## Proof
 
-- Replace pane drag handlers with per-row Start/End buttons, visible endpoints, and Apply/Clear.
-- Keep a requested range separate from loaded state; commit it only when Hunk loads its exact diff.
-- Make unconfigured recent history explicit and stable across pushes; configured scope failures
-  remain visible and restrict the pane to the opened commit rather than silently broadening scope.
-- Use existing OpenTUI test renderer for real pointer events; retain Node unit/typecheck gates.
-- No new dependencies, generic UI framework, or changes to Hunk itself.
+Run `npm run typecheck`, `npm test` and `git diff --check`. Node covers state, CLI, menu
+cancellation/staleness, endpoint rules and pane swap ordering. Bun's existing OpenTUI renderer
+covers actual pointer dispatch, one-row chrome, full-width list rows, scrolling and queued Clear
+while Apply is pending. No dependencies or new UI framework are added.
 
-## Verification
-
-`npm run typecheck` and `npm test` pass: 79 Node unit tests and four rendered OpenTUI pointer
-scenarios. The rendered gate caught overlapping headers under a long list; fixed header rows now
-remain visible while the list scrolls. It also covers Clear during an in-flight Apply. Node cannot
-initialize this OpenTUI native renderer, so only the rendered shard uses Bun; package installation
-remains npm. The previous module-mock and compilation experiments were removed.
-
-Final interactive shape approval is still pending. Tests do not substitute for that approval.
+Final live visual review is required; automated tests do not approve the shape.

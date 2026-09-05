@@ -2,11 +2,12 @@ import assert from "node:assert/strict";
 import { afterEach, beforeEach, test } from "node:test";
 import { act } from "react";
 import { testRender } from "@opentui/react/test-utils";
-import type { TestRenderer } from "@opentui/core/testing";
+import { MouseButtons, type MouseButton, type TestRenderer } from "@opentui/core/testing";
 import type { ExtensionPaneProps } from "hunkdiff/extension";
 import { publishRange, publishSeries, selectedRange, seriesSnapshot } from "../store.ts";
 import { resetPending, resetSessionId, type SessionDeps } from "../session.ts";
 import { CommitLogPane } from "../pane.tsx";
+import { showRangeActions, type RangeDraft } from "../range-actions.ts";
 
 const requested: (readonly string[])[] = [];
 const session: SessionDeps = {
@@ -32,8 +33,11 @@ const commits = Array.from({ length: 20 }, (_, index) => ({
   baseSha: String(index).padStart(40, "0"),
 }));
 const warnings: string[] = [];
+const draft: RangeDraft = { start: null, end: null };
+let answer: string | null = null;
+let filesShown = 0;
 const props: ExtensionPaneProps = {
-  width: 48,
+  width: 34,
   height: 12,
   placement: "left",
   files: [],
@@ -75,96 +79,124 @@ beforeEach(() => {
   resetSessionId();
   requested.length = 0;
   warnings.length = 0;
+  draft.start = null;
+  draft.end = null;
+  answer = null;
+  filesShown = 0;
   publishSeries({ commits, position: 0, range: null, message: null, scope: "main..topic" });
 });
 
-async function pane(deps: SessionDeps = session) {
-  const setup = await testRender(<CommitLogPane {...props} session={deps} />, {
-    width: 48,
+async function pane(deps: SessionDeps = session, width = props.width) {
+  const setup = await testRender(<CommitLogPane {...props} width={width} session={deps}
+    onFiles={() => { filesShown += 1; }}
+    onActions={(sha) => { void showRangeActions(sha, draft, {
+      notify: props.actions.notify,
+      dialogs: { select: async ({ options }) => {
+        if (answer !== null) assert.ok(options.includes(answer), `missing menu option ${answer}`);
+        return answer;
+      } },
+    }, deps); }} />, {
+    width,
     height: 12,
   });
   renderer = setup.renderer;
   await setup.renderOnce();
   return {
     ...setup,
-    async click(id: string) {
+    async click(id: string, button: MouseButton = MouseButtons.LEFT) {
       const target = setup.renderer.root.findDescendantById(id);
       assert.ok(target, `missing control ${id}`);
       assert.ok(target.y >= 0 && target.y < 12, `${id} is outside the visible pane`);
       await act(async () => {
-        await setup.mockMouse.click(target.x + 1, target.y);
+        await setup.mockMouse.click(target.x + 1, target.y, button);
       });
       await setup.renderOnce();
     },
   };
 }
 
-test("Start/End do not load until Apply; Clear returns to one commit", async () => {
+test("compact header leaves eleven full-width rows and Files switches view", async () => {
   const ui = await pane();
-  assert.match(ui.captureCharFrame(), /Scope: main\.\.topic/);
-  await ui.click("range-apply");
-  assert.match(warnings[0] ?? "", /Choose Start and End/);
-  await ui.click("range-start-2");
-  await ui.click("range-end-0");
+  const frame = ui.captureCharFrame();
+  assert.match(frame, /Files.*⋯/);
+  assert.doesNotMatch(frame, /Start|End|not set|Scope|\[Apply\]/);
+  assert.equal(ui.renderer.root.findDescendantById("commit-log-row-0")?.y, 1);
+  assert.equal(ui.renderer.root.findDescendantById("commit-log-row-10")?.y, 11);
+  assert.equal(ui.renderer.root.findDescendantById("commit-log-row-0")?.width, 34);
+  await ui.click("show-files");
+  assert.equal(filesShown, 1);
   assert.deepEqual(requested, []);
-  assert.match(ui.captureCharFrame(), /Start: 0000003/);
-  assert.match(ui.captureCharFrame(), /End:   0000001/);
-  await ui.click("range-apply");
-  const selection = selectedRange(seriesSnapshot(), 2, 0);
+});
+
+test("menu endpoints do not load until Apply; Clear returns to one commit", async () => {
+  const ui = await pane();
+  answer = "Start here";
+  await ui.click("range-actions");
+  await ui.click("commit-log-row-2");
+  requested.length = 0;
+  await act(async () => { publishSeries({ ...seriesSnapshot(), position: 2 }); });
+  await ui.renderOnce();
+  answer = "End here";
+  await ui.click("range-actions");
+  assert.deepEqual(requested, []);
+  answer = "Apply 1–3";
+  await ui.click("range-actions");
+  const selection = selectedRange(seriesSnapshot(), 0, 2);
   assert.ok(selection);
   assert.deepEqual(requested, [["diff", selection.revisionRange]]);
-  assert.equal(seriesSnapshot().range, null, "draft is not the loaded range");
-  await act(async () => {
-    publishRange(selection);
-  });
+  assert.equal(seriesSnapshot().range, null);
+  await act(async () => { publishRange(selection); });
   await ui.renderOnce();
-  assert.match(ui.captureCharFrame(), /Applied 1–3\/20/);
-  await ui.click("range-clear");
-  assert.deepEqual(requested[1], ["show", commits[0]!.sha]);
-  assert.match(ui.captureCharFrame(), /Start: not set/);
-  assert.match(ui.captureCharFrame(), /End:   not set/);
+  answer = "Clear range";
+  await ui.click("range-actions");
+  assert.deepEqual(requested[1], ["show", commits[2]!.sha]);
+  assert.deepEqual(draft, { start: null, end: null });
 });
 
-test("single commits, equal endpoints and release outside the list need no drag state", async () => {
+test("single clicks and scrolling keep rows accessible without drag range state", async () => {
   const ui = await pane();
-  await ui.click("commit-open-1");
+  await ui.click("commit-log-row-1");
   assert.deepEqual(requested, [["show", commits[1]!.sha]]);
-  requested.length = 0;
-  await ui.click("range-start-1");
-  await ui.click("range-end-1");
-  await ui.click("range-apply");
-  assert.deepEqual(requested, [["show", commits[1]!.sha]]);
-  requested.length = 0;
   await act(async () => {
-    await ui.mockMouse.drag(15, 6, 47, 0);
+    await ui.mockMouse.drag(15, 6, 33, 0);
+    for (let i = 0; i < 6; i += 1) await ui.mockMouse.scroll(25, 10, "down");
   });
   await ui.renderOnce();
-  assert.ok(
-    requested.every((target) => target[0] === "show"),
-    "drag must never apply a range",
-  );
-  await ui.click("range-clear");
-  await ui.click("range-start-0");
-  await ui.click("range-end-2");
-  assert.match(ui.captureCharFrame(), /End:   0000003/);
+  assert.ok(requested.every((target) => target[0] === "show"));
+  const rows = commits.map((_, index) => ui.renderer.root.findDescendantById(`commit-log-row-${index}`));
+  const visible = rows.findIndex((row, index) => index > 10 && row && row.y >= 1 && row.y < 12);
+  assert.ok(visible > 10);
+  await ui.click(`commit-log-row-${visible}`);
+  assert.deepEqual(requested.at(-1), ["show", commits[visible]!.sha]);
 });
 
-test("endpoints survive scrolling without selecting intervening commits", async () => {
+test("right-click endpoints survive scrolling and cancelled menus without loading", async () => {
   const ui = await pane();
-  await ui.click("range-start-0");
+  answer = "Start here";
+  await ui.click("commit-log-row-0", MouseButtons.RIGHT);
   await act(async () => {
     for (let i = 0; i < 6; i += 1) await ui.mockMouse.scroll(25, 10, "down");
   });
   await ui.renderOnce();
-  const rows = commits.map((_, index) => ui.renderer.root.findDescendantById(`range-end-${index}`));
-  const visible = rows.findIndex((row, index) => index > 6 && row && row.y >= 5 && row.y < 12);
-  assert.ok(visible > 6, "wheel must reach commits below the initial viewport");
-  await ui.click(`range-end-${visible}`);
+  const visible = commits.findIndex((_, index) => {
+    const row = ui.renderer.root.findDescendantById(`commit-log-row-${index}`);
+    return index > 10 && row !== null && row !== undefined && row.y >= 1 && row.y < 12;
+  });
+  assert.ok(visible > 10);
+  answer = "End here";
+  await ui.click(`commit-log-row-${visible}`, MouseButtons.RIGHT);
+  answer = null;
+  await ui.click("range-actions");
+  assert.deepEqual(draft, { start: commits[0]!.sha, end: commits[visible]!.sha });
   assert.deepEqual(requested, []);
-  await ui.click("range-apply");
-  assert.deepEqual(requested, [
-    ["diff", selectedRange(seriesSnapshot(), 0, visible)?.revisionRange],
-  ]);
+});
+
+test("minimum-width rows clip long subjects without wrapping or losing controls", async () => {
+  publishSeries({ ...seriesSnapshot(), commits: commits.map((commit) => ({ ...commit, subject: "Long subject ".repeat(8) })) });
+  const ui = await pane(session, 22);
+  assert.match(ui.captureCharFrame(), /Files.*⋯/);
+  assert.equal(ui.renderer.root.findDescendantById("commit-log-row-1")?.y, 2);
+  assert.equal(ui.renderer.root.findDescendantById("commit-log-row-0")?.width, 22);
 });
 
 test("Clear during Apply queues the loaded commit, not a late range", async () => {
@@ -172,34 +204,25 @@ test("Clear during Apply queues the loaded commit, not a late range", async () =
   const ui = await pane({
     pid: session.pid,
     run: async (args) => {
-      const answer = await session.run(args);
-      if (args[4] === "diff")
-        return new Promise<string>((resolve) => {
-          finish = resolve;
-        });
-      return answer;
+      const result = await session.run(args);
+      if (args[4] === "diff") return new Promise<string>((resolve) => { finish = resolve; });
+      return result;
     },
   });
-  await ui.click("range-start-0");
-  await ui.click("range-end-2");
+  draft.start = commits[0]!.sha;
+  draft.end = commits[2]!.sha;
   const range = selectedRange(seriesSnapshot(), 0, 2);
   assert.ok(range);
-  await ui.click("range-apply");
-  await ui.click("range-clear");
+  answer = "Apply 1–3";
+  await ui.click("range-actions");
+  answer = "Clear range";
+  await ui.click("range-actions");
   assert.deepEqual(requested, [["diff", range.revisionRange]]);
-  const complete = finish;
-  assert.ok(complete);
+  assert.ok(finish);
   await act(async () => {
-    complete("Reloaded");
-    await new Promise<void>((resolve) => {
-      setImmediate(resolve);
-    });
+    finish!("Reloaded");
+    await new Promise<void>((resolve) => { setImmediate(resolve); });
   });
-  await ui.renderOnce();
-  assert.deepEqual(requested, [
-    ["diff", range.revisionRange],
-    ["show", commits[0]!.sha],
-  ]);
+  assert.deepEqual(requested, [["diff", range.revisionRange], ["show", commits[0]!.sha]]);
   assert.equal(seriesSnapshot().range, null);
-  assert.match(ui.captureCharFrame(), /Start: not set/);
 });
