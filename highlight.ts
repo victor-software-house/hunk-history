@@ -155,30 +155,15 @@ export function clipRow(row: Row, width: number): Row {
   return clipped;
 }
 
-/** The rows the message pane paints, laid out for its exact size. */
+/** Lay out the complete message for a fixed-width, scrollable presentation. */
 export function messageRows(
   commit: SeriesCommit,
   message: CommitMessage,
   width: number,
-  height: number,
 ): Row[] {
-  if (height <= 0 || width <= 0) {
-    return [];
-  }
-
-  const body =
-    message.body === ""
-      ? []
-      : ["", ...wrap(message.body, width - 1).map((line) => (line === "" ? "" : ` ${line}`))];
-  const rows = [subjectRow(commit), metaRow(message), ...body.map(bodyRow)];
-
-  if (rows.length <= height) {
-    return rows.map((row) => clipRow(row, width));
-  }
-
-  const dropped = rows.length - (height - 1);
-  return [
-    ...rows.slice(0, height - 1).map((row) => clipRow(row, width)),
-    [{ text: clip(` +${dropped} more lines`, width), tone: "accentMuted" }],
-  ];
+  if (width <= 0) return [];
+  const body = message.body === "" ? []
+    : wrap(message.body, width - 1).map((line) => line === "" ? "" : ` ${line}`);
+  return [subjectRow(commit), metaRow(message), ...body.map(bodyRow)]
+    .map((row) => clipRow(row, width));
 }

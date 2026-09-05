@@ -24,7 +24,7 @@ The previous no-CLI conclusion was wrong: it came from the extension's stale
 | Agent-callable CLI | `registerCliCommand` | Owns one top-level token and its argument subtree, e.g. `hunk history ...`; cannot replace built-ins or register beneath `hunk session`. |
 | TUI actions | `registerCommand` | Namespaced action in Extensions menu; optional remappable keys. Not automatically callable through the session CLI. |
 | Invoke native TUI actions | `ctx.commands.execute` / `isEnabled` | Command handlers can invoke explicitly public `hunk.*` actions, such as `hunk.app.refresh`. Cannot invoke other extensions' actions or arbitrary private host commands. |
-| Docked UI | `registerPane` | Owns a component and local state. Host owns placement, dimensions, minimum diff space, availability and failure containment. |
+| Docked UI | `registerPane` | Owns a component and local state. `replaces: "hunk:files"` claims the Files role for an owned tabbed sidebar; the native Files command follows it. Host owns placement, dimensions, minimum diff space, availability and failure containment. |
 | Alternate file presentation | `registerFileView` | Supplies rows/layout for matching files. Host retains diff geometry, navigation, raw fallback and note placement. |
 | Source-line marks | `registerLineHighlighter` | Contributes character ranges and semantic tones without replacing the diff renderer. |
 | Keyboard interpretation | `registerKeyboardMode` | Owns a deliberately activated mode. Host retains input precedence and exit paths. |
@@ -115,7 +115,12 @@ the supported session reload path. Do not adopt unreleased imports or pretend np
 
 ## Consequences for hunk-history
 
-1. Preserve the approved UI; comment rendering is not the requested problem.
+1. Preserve approved commit/range gestures and host comment ownership. The operator
+   subsequently authorized an owned Files/History tabbed sidebar. Native navigation
+   is [vendored with provenance](../vendor/hunk/README.md), not a Hunk application fork.
+   `HunkFileNav` is publicly exported for standalone embedding but is not supplied
+   to extension imports by the host; its package dependencies/theme interface are
+   not assumed to be an extension-native reuse surface.
 2. Keep Hunk as the owner of comments. Do not introduce per-commit isolation or a
    parallel comment store without a separate product decision.
 3. Keep the serialized official session CLI path for replacement comparisons.

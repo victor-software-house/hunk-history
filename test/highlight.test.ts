@@ -104,24 +104,21 @@ test("a row is clipped across its segments, never past the pane", () => {
 });
 
 test("the message is laid out for the pane it has", () => {
-  const rows = messageRows(COMMIT, MESSAGE, 60, 8);
+  const rows = messageRows(COMMIT, MESSAGE, 60);
   assert.deepEqual(rows.map((row) => row.map((segment) => segment.text).join("")), [
     " 8610b105 chore(supply-chain-node): regenerate the open-api…",
     " Ada Lovelace  Aug 1, 2026 at 9:04:05 PM UTC+03:00",
-    "",
     " why it changed",
   ]);
 });
 
-test("a body too tall keeps its opening and counts the rest", () => {
+test("the complete body remains available for scrolling", () => {
   const body = ["one", "two", "three", "four", "five", "six"].join("\n");
-  const rows = messageRows(COMMIT, { ...MESSAGE, body }, 60, 5);
-
-  assert.equal(rows.length, 5);
-  assert.equal(text(rows[4] ?? []), " +5 more lines");
-  assert.deepEqual(tones(rows[4] ?? []), ["accentMuted"]);
+  const rows = messageRows(COMMIT, { ...MESSAGE, body }, 60);
+  assert.equal(rows.length, 8);
+  assert.equal(text(rows.at(-1) ?? []), " six");
 });
 
-test("no message fits in no rows", () => {
-  assert.deepEqual(messageRows(COMMIT, MESSAGE, 60, 0), []);
+test("no message fits without width", () => {
+  assert.deepEqual(messageRows(COMMIT, MESSAGE, 0), []);
 });

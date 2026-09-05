@@ -6,17 +6,16 @@ import { messageRows, type Tone } from "./highlight.ts";
 import { commitRow, seriesHeading, clip } from "./row.ts";
 import { pendingReview, subscribePending, requestCommit, requestRange, requestWorking, type SessionDeps } from "./session.ts";
 import { isSelectedIndex, selectedRange, remapRange, seriesSnapshot, subscribeSeries } from "./store.ts";
-import { historySnapshot, subscribeHistory, acknowledgeNewCommits, setHistoryGesture, rememberHistoryScroll, setHistoryPressed } from "./history.ts";
+import { historySnapshot, subscribeHistory, acknowledgeNewCommits, setHistoryGesture, rememberHistoryScroll, rememberHistoryReveal, setHistoryPressed } from "./history.ts";
 
 export interface CommitLogPaneProps extends ExtensionPaneProps {
   session?: SessionDeps;
-  onFiles(): void;
   onMore?(): void;
 }
 
 const DOUBLE_CLICK_MS = 300;
 
-export function CommitLogPane({ actions, width, height, theme, session, onFiles, onMore }: CommitLogPaneProps): ReactNode {
+export function CommitLogPane({ actions, width, height, theme, session, onMore }: CommitLogPaneProps): ReactNode {
   const snapshot = useSyncExternalStore(subscribeSeries, seriesSnapshot);
   const history = useSyncExternalStore(subscribeHistory, historySnapshot);
   const { commits, position, range } = snapshot;
@@ -32,8 +31,13 @@ export function CommitLogPane({ actions, width, height, theme, session, onFiles,
   const anchor = history.anchor;
   const [hovered, setHovered] = useState<string | null>(null);
   const [offset, setOffset] = useState(history.scrollTop);
-  const previousRows = useRef({ commits, older: history.hasMore });
+  const previousRows = useRef(commits);
+  const busy = pending !== null || history.loading;
+  const [frame, setFrame] = useState(0);
   const loadedSha = snapshot.commit?.sha ?? commits[position ?? -1]?.sha;
+  const loaded = useRef(loadedSha);
+  loaded.current = loadedSha;
+  const updateViewport = useRef<() => void>(() => {});
 
   const cancel = () => { setHistoryGesture(null); };
   // The host remounts App on daemon reload: gestures live outside this component.
@@ -77,12 +81,20 @@ export function CommitLogPane({ actions, width, height, theme, session, onFiles,
     let restore = historySnapshot().scrollTop;
     let active = true;
     const update = () => {
-      if (!active) return;
+      if (!active || view.viewport.height <= 0) return;
       if (restore > 0) {
-        if (view.viewport.height === 0 || view.scrollHeight <= view.viewport.height) return;
-        const target = restore;
+        const target = Math.min(restore, Math.max(0, view.scrollHeight - view.viewport.height));
         restore = 0;
         view.scrollTop = target;
+      }
+      const sha = loaded.current;
+      if (sha && sha !== historySnapshot().revealedSha) {
+        const row = seriesSnapshot().commits.findIndex((commit) => commit.sha === sha);
+        if (row >= 0 && view.scrollHeight > 0) {
+          rememberHistoryReveal(sha);
+          if (row < view.scrollTop) view.scrollTop = row;
+          else if (row >= view.scrollTop + view.viewport.height) view.scrollTop = row - view.viewport.height + 1;
+        }
       }
       setOffset(view.scrollTop);
       rememberHistoryScroll(view.scrollTop);
@@ -91,6 +103,7 @@ export function CommitLogPane({ actions, width, height, theme, session, onFiles,
     view.verticalScrollBar.on("change", update);
     renderer.root.on("layout-changed", afterLayout);
     update();
+    updateViewport.current = update;
     return () => {
       active = false;
       view.verticalScrollBar.off("change", update);
@@ -98,29 +111,21 @@ export function CommitLogPane({ actions, width, height, theme, session, onFiles,
     };
   }, []);
   useEffect(() => {
-    const view = scroll.current;
-    if (!view) return;
-    const old = previousRows.current;
-    if (old.commits === commits && old.older === history.hasMore) return;
-    const first = old.commits[Math.max(0, Math.floor(view.scrollTop) - (old.older ? 1 : 0))];
-    const index = first ? commits.findIndex((row) => row.sha === first.sha) : -1;
-    if (old.commits !== commits && index >= 0) {
-      view.scrollTop += index - old.commits.indexOf(first!) + Number(history.hasMore) - Number(old.older);
-    }
-    previousRows.current = { commits, older: history.hasMore };
-    setOffset(view.scrollTop);
-  }, [commits, history.hasMore]);
+    if (!busy) return;
+    const timer = setInterval(() => setFrame((value) => (value + 1) % 4), 100);
+    return () => clearInterval(timer);
+  }, [busy]);
   useEffect(() => {
     const view = scroll.current;
-    const index = commits.findIndex((row) => row.sha === loadedSha);
-    if (!view || index < 0) return;
-    const row = index + (history.hasMore ? 1 : 0);
-    const visible = Math.max(1, height - 4);
-    if (row < view.scrollTop) view.scrollTop = row;
-    else if (row >= view.scrollTop + visible) view.scrollTop = row - visible + 1;
+    const old = previousRows.current;
+    if (!view || old === commits) return;
+    const first = old[Math.max(0, Math.floor(view.scrollTop))];
+    const index = first ? commits.findIndex((row) => row.sha === first.sha) : -1;
+    if (index >= 0 && first) view.scrollTop += index - old.indexOf(first);
+    previousRows.current = commits;
     setOffset(view.scrollTop);
-    rememberHistoryScroll(view.scrollTop);
-  }, [loadedSha]);
+  }, [commits]);
+  useEffect(() => { queueMicrotask(() => updateViewport.current()); }, [loadedSha]);
 
   const start = Math.max(0, Math.floor(offset) - 8);
   const end = Math.min(commits.length, start + Math.max(1, height) + 16);
@@ -140,8 +145,9 @@ export function CommitLogPane({ actions, width, height, theme, session, onFiles,
       if (!event.isDragging) action();
     },
   });
-  const label = seriesHeading(position, commits.length, width - 7, range) + (history.hasMore ? "+" : "");
-  const status = anchor ? " End · Esc" : pending ? " Loading" : history.error ? ` ${history.error}`
+  const label = seriesHeading(position, commits.length, width, range) + (history.hasMore ? "+" : "");
+  const spinner = ["◐", "◓", "◑", "◒"][frame];
+  const status = anchor ? " End · Esc" : pending ? ` ${spinner} Loading comparison` : history.loading ? ` ${spinner} Refreshing history` : history.error ? ` ${history.error}`
     : history.newCommits > 0 ? ` ${history.newCommits} new · click to view`
     : snapshot.commit && position === null ? " Commit outside scope"
     : ` Scope: ${history.scope}`;
@@ -149,13 +155,8 @@ export function CommitLogPane({ actions, width, height, theme, session, onFiles,
   return (
     <box style={{ width, height, overflow: "hidden", backgroundColor: theme.panel, flexDirection: "column" }}>
       <box style={{ height: 1, flexShrink: 0, flexDirection: "row", backgroundColor: theme.panel }}>
-        <text id="show-files" wrapMode="none" selectable={false}
-          fg={hovered === "files" ? theme.text : theme.muted}
-          bg={hovered === "files" ? theme.accentMuted : theme.panelAlt}
-          style={{ width: 7, height: 1, flexShrink: 0 }}
-          {...handlers("files", () => { cancel(); onFiles(); })}>{"[Files]"}</text>
         <text id="history-heading" wrapMode="none" selectable={false} fg={theme.muted}
-          style={{ width: Math.max(0, width - 7), height: 1, flexShrink: 0 }}>{clip(label, width - 7)}</text>
+          style={{ width, height: 1, flexShrink: 0 }}>{clip(label, width)}</text>
       </box>
       <text id="history-status" wrapMode="none" selectable={false} fg={anchor || history.error ? theme.text : theme.muted}
         style={{ width, height: 1, flexShrink: 0 }}
@@ -166,22 +167,20 @@ export function CommitLogPane({ actions, width, height, theme, session, onFiles,
         })}>{clip(status, width)}</text>
       {(["staged", "unstaged"] as const).map((kind) => {
         const active = pending?.kind === "working" ? pending.value === kind : !pending && snapshot.review?.endsWith(kind === "staged" ? " staged changes" : " working tree");
-        const background = active ? theme.selectedHunk : hovered === kind ? theme.panelAlt : theme.panel;
-        return <text key={kind} id={`review-${kind}`} wrapMode="none" selectable={false}
-          fg={theme.text} bg={background} style={{ height: 1, flexShrink: 0 }}
+        const background = active ? theme.selectedHunk : hovered === kind ? theme.accentMuted : theme.panelAlt;
+        const tone = kind === "staged" ? theme.badgeAdded : theme.fileModified;
+        return <box key={kind} id={`review-${kind}`} style={{ height: 1, flexShrink: 0, width, flexDirection: "row", backgroundColor: background }}
           {...handlers(kind, () => { cancel(); requestWorking(kind, actions.notify, session); })}>
-          {clip(` ${active ? "▸" : " "} ${kind === "staged" ? "Staged" : "Unstaged"} ${history[kind]}`, width)}
-        </text>;
+          <text selectable={false} fg={tone} bg={background} style={{ width: 5, height: 1 }}>{active ? "▸" : " "}{kind === "staged" ? "[S] " : "[W] "}</text>
+          <text selectable={false} fg={theme.text} bg={background} style={{ flexGrow: 1, height: 1 }}><b>{kind === "staged" ? "Staged" : "Unstaged"}</b></text>
+          <text selectable={false} fg={tone} bg={background} style={{ height: 1 }}>{history[kind]} </text>
+        </box>;
       })}
       <scrollbox id="history-scroll" ref={scroll} focused={false} scrollY={true}
         style={{ flexGrow: 1, backgroundColor: theme.panel }}
         rootOptions={{ backgroundColor: theme.panel }} wrapperOptions={{ backgroundColor: theme.panel }}
         viewportOptions={{ backgroundColor: theme.panel }} contentOptions={{ backgroundColor: theme.panel }}
         verticalScrollbarOptions={{ visible: false }} horizontalScrollbarOptions={{ visible: false }}>
-        {history.hasMore && <text id="load-older" selectable={false} fg={theme.muted}
-          style={{ height: 1, flexShrink: 0 }} {...handlers("older", () => { if (!history.loading) onMore?.(); })}>
-          {history.loading ? " Loading older…" : " Load older…"}
-        </text>}
         {start > 0 && <box style={{ height: start, flexShrink: 0 }} />}
         {commits.slice(start, end).map((commit, local) => {
           const index = start + local;
@@ -200,6 +199,13 @@ export function CommitLogPane({ actions, width, height, theme, session, onFiles,
         {end < commits.length && <box style={{ height: commits.length - end, flexShrink: 0 }} />}
         {commits.length === 0 && <text fg={theme.muted}>{history.loading ? " Loading history…" : " No commits in scope"}</text>}
       </scrollbox>
+      <text id="load-older" selectable={false} truncate wrapMode="none"
+        fg={history.hasMore ? theme.accent : theme.muted}
+        bg={hovered === "older" && history.hasMore ? theme.accentMuted : theme.panelAlt}
+        style={{ width, height: 1, flexShrink: 0 }}
+        {...handlers("older", () => { if (history.hasMore && !history.loading) onMore?.(); })}>
+        {history.loading ? ` ${spinner} Loading history` : history.hasMore ? " ↑ Load older commits" : ` All ${commits.length} loaded`}
+      </text>
     </box>
   );
 }
@@ -227,28 +233,18 @@ function toneColor(theme: ExtensionPaneProps["theme"], tone: Tone): string {
 export function MessagePane({ width, height, theme }: ExtensionPaneProps): ReactNode {
   const { commits, position, message, commit } = useSyncExternalStore(subscribeSeries, seriesSnapshot);
   const head = commit ?? (position === null ? undefined : commits[position]);
-  const rows =
-    head === undefined || message === null ? [] : messageRows(head, message, width, height);
-
-  return (
-    <box
-      style={{
-        width,
-        height,
-        overflow: "hidden",
-        backgroundColor: theme.panel,
-        flexDirection: "column",
-      }}
-    >
-      {rows.map((row, index) => (
-        <text key={`message-${index}`} bg={theme.panel}>
-          {row.map((segment, part) => (
-            <span key={`segment-${part}`} fg={toneColor(theme, segment.tone)} bg={theme.panel}>
-              {segment.text}
-            </span>
-          ))}
-        </text>
-      ))}
-    </box>
-  );
+  const rows = head === undefined || message === null ? [] : messageRows(head, message, Math.max(0, width - 1));
+  const renderRow = (row: (typeof rows)[number], index: number) => <text key={index} bg={theme.panel} style={{ height: 1, flexShrink: 0 }}>
+    {row.map((segment, part) => <span key={part} fg={toneColor(theme, segment.tone)} bg={theme.panel}>{segment.text}</span>)}
+  </text>;
+  return <box style={{ width, height, overflow: "hidden", backgroundColor: theme.panel, flexDirection: "column" }}>
+    {rows.slice(0, 2).map(renderRow)}
+    <scrollbox key={head?.sha} id="commit-body-scroll" scrollY focused={false}
+      style={{ width, height: Math.max(0, height - 2), backgroundColor: theme.panel }}
+      rootOptions={{ backgroundColor: theme.panel }} wrapperOptions={{ backgroundColor: theme.panel }}
+      viewportOptions={{ backgroundColor: theme.panel }} contentOptions={{ backgroundColor: theme.panel }}
+      verticalScrollbarOptions={{ visible: rows.length > height }} horizontalScrollbarOptions={{ visible: false }}>
+      {rows.slice(2).map(renderRow)}
+    </scrollbox>
+  </box>;
 }

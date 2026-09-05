@@ -7,9 +7,9 @@
   separate Apply step. Earlier control-heavy approaches were rejected.
 - The first click of a double-click may start loading its commit. Its completion
   must not erase double-click recognition or the armed range.
-- `h` temporarily replaces Files with History and restores its prior visibility.
-  If Files was hidden, closing History must leave both hidden. Keep the explicit
-  Files control and exclusive `s` override unchanged.
+- Final tabbed-sidebar contract: `s` toggles the entire sidebar and preserves its
+  active tab; `h` switches Files/History only, preserving visibility. This supersedes
+  the prior separate-pane Files-restoration behavior.
 - The operator requested this bounded correction within 0.0.3: move its existing
   tag after verification instead of bumping. Layout redesign is separate follow-up.
 - Support live history, new commits, and selectable staged/unstaged reviews without
@@ -40,7 +40,21 @@
   Exact range endpoint SHAs survive row-index changes. Working-state reviews do
   not erase history. Staged and Unstaged are two rows, not new toolbars.
 - Scope and live-comparison actions live in the existing Extensions menu. New-commit
-  feedback uses the existing header. Message-pane sizing remains unchanged.
+  feedback uses a stable status row; pagination is fixed outside the scroller.
+
+## Approved tabbed-sidebar direction
+
+- Own one pane replacing `hunk:files`, with Files/History tabs, hover feedback,
+  immediate switching and independent scroll memory. No Hunk application fork.
+- Vendor native file navigation with attribution and a pinned upstream source;
+  keep host file selection, diff rendering and comment ownership intact.
+- Keep the final s=visibility / h=tabs contract and accepted commit/range gestures. Tab changes cancel
+  armed gestures without replacing the comparison.
+- Distinguish staged/unstaged with themed badges. Show loading progress and explicit
+  all-loaded pagination state instead of hiding the explanation.
+- Commit bodies scroll at the chosen height. Do not change the selected message
+  pane id automatically on commit changes; this preserves Hunk's dragged height.
+- This redesign remains a source trial pending operator visual approval.
 
 ## Proof and approval gate
 

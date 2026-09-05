@@ -1,70 +1,71 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { createSidebar } from "../sidebar.ts";
+import { createSidebar, SIDEBAR_PANE } from "../sidebar.ts";
 
-function fixture(initial: string[] = []) {
-  const visible = new Set(initial);
-  const calls: string[] = [];
+function fixture() {
+  const visible = new Set<string>();
   const panes = {
-    close(id: string) { calls.push(`close ${id}`); visible.delete(id); },
-    open(id: string) { calls.push(`open ${id}`); visible.add(id); assert.ok(visible.size <= 1); },
+    close(id: string) { visible.delete(id); },
+    open(id: string) { assert.equal(id, SIDEBAR_PANE); visible.add(id); assert.ok(visible.size <= 1); },
     toggle(id: string) { if (visible.has(id)) this.close(id); else this.open(id); },
     isOpen(id: string) { return visible.has(id); },
   };
-  return { sidebar: createSidebar(), panes, visible, calls };
+  return { sidebar: createSidebar(), panes, visible };
 }
 
-test("sidebar swap closes the previous pane before opening its counterpart", () => {
-  const { sidebar, panes, calls } = fixture(["hunk:files"]);
-  sidebar.show(panes, "commits");
+test("tabs select views without opening a second pane", () => {
+  const { sidebar, panes, visible } = fixture();
   sidebar.show(panes, "files");
-  assert.deepEqual(calls, ["close hunk:files", "open commits", "close commits", "open hunk:files"]);
+  sidebar.selectTab("history");
+  assert.equal(sidebar.getTab(), "history");
+  sidebar.selectTab("files");
+  assert.equal(sidebar.getTab(), "files");
+  assert.deepEqual([...visible], [SIDEBAR_PANE]);
 });
 
-test("h hides History without opening Files when Files was initially hidden", () => {
+test("h switches tabs without changing sidebar visibility", () => {
   const { sidebar, panes, visible } = fixture();
-  for (let cycle = 0; cycle < 2; cycle++) {
-    sidebar.toggleHistory(panes);
-    assert.deepEqual([...visible], ["commits"]);
-    sidebar.toggleHistory(panes);
-    assert.deepEqual([...visible], []);
+  sidebar.toggleTab();
+  assert.equal(sidebar.getTab(), "files");
+  assert.equal(visible.size, 0);
+  sidebar.show(panes, "files");
+  sidebar.toggleTab();
+  assert.equal(sidebar.getTab(), "history");
+  assert.deepEqual([...visible], [SIDEBAR_PANE]);
+  sidebar.toggleTab();
+  assert.equal(sidebar.getTab(), "files");
+  assert.deepEqual([...visible], [SIDEBAR_PANE]);
+});
+
+test("s hides and shows either tab without changing its state", () => {
+  const { sidebar, panes, visible } = fixture();
+  for (const tab of ["files", "history"] as const) {
+    sidebar.show(panes, tab);
+    sidebar.rememberFilesScroll(30);
+    sidebar.toggleSidebar(panes);
+    assert.equal(visible.size, 0);
+    assert.equal(sidebar.getTab(), tab);
+    sidebar.toggleSidebar(panes);
+    assert.deepEqual([...visible], [SIDEBAR_PANE]);
+    assert.equal(sidebar.getTab(), tab);
+    assert.equal(sidebar.getFilesScroll(), 30);
   }
 });
 
-test("h restores Files when History replaced it, including repeated show on reload", () => {
-  const { sidebar, panes, visible } = fixture(["hunk:files"]);
-  sidebar.show(panes, "commits");
-  sidebar.show(panes, "commits");
-  sidebar.toggleHistory(panes);
-  assert.deepEqual([...visible], ["hunk:files"]);
-  sidebar.toggleHistory(panes);
-  sidebar.toggleHistory(panes);
-  assert.deepEqual([...visible], ["hunk:files"]);
-});
-
-test("s remains exclusive and a subsequent h cycle remembers its new Files state", () => {
-  const { sidebar, panes, visible } = fixture(["hunk:files"]);
-  sidebar.show(panes, "commits");
-  sidebar.toggleFiles(panes);
-  assert.deepEqual([...visible], ["hunk:files"]);
-  sidebar.toggleFiles(panes);
-  assert.deepEqual([...visible], []);
-  sidebar.toggleHistory(panes);
-  sidebar.toggleHistory(panes);
-  assert.deepEqual([...visible], []);
-  sidebar.show(panes, "files");
-  sidebar.toggleHistory(panes);
-  sidebar.toggleHistory(panes);
-  assert.deepEqual([...visible], ["hunk:files"]);
-});
-
-test("sidebar restoration does not leak between review runtimes", () => {
-  const first = fixture(["hunk:files"]);
+test("tab and scroll state remain independent across runtimes", () => {
+  const first = fixture();
   const second = fixture();
-  first.sidebar.show(first.panes, "commits");
-  second.sidebar.show(second.panes, "commits");
-  second.sidebar.toggleHistory(second.panes);
-  first.sidebar.toggleHistory(first.panes);
-  assert.deepEqual([...first.visible], ["hunk:files"]);
-  assert.deepEqual([...second.visible], []);
+  let changes = 0;
+  const unsubscribe = first.sidebar.subscribe(() => changes++);
+  first.sidebar.show(first.panes, "files");
+  first.sidebar.rememberFilesScroll(30);
+  first.sidebar.selectTab("history");
+  first.sidebar.selectTab("files");
+  assert.equal(first.sidebar.getFilesScroll(), 30);
+  assert.equal(second.sidebar.getFilesScroll(), 0);
+  assert.equal(second.sidebar.getTab(), "history");
+  assert.equal(changes, 3);
+  unsubscribe();
+  first.sidebar.selectTab("history");
+  assert.equal(changes, 3);
 });

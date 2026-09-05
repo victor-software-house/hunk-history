@@ -1,5 +1,6 @@
 import type { ExtensionCommandContext, ExtensionPaneControls, HunkExtensionAPI } from "hunkdiff/extension";
-import { CommitLogPane, MessagePane } from "./pane.tsx";
+import { MessagePane } from "./pane.tsx";
+import { BrowserPane } from "./browser-pane.tsx";
 import { configuredLimit, configuredMessageRows, configuredRange, gitRunner, readMessage, readPage, rangeTitle, seriesTitle } from "./series.ts";
 import { loadingReview, pendingCommit, requestCommit, requestWorking, requestComparison } from "./session.ts";
 import { HistoryController, historySnapshot, cancelHistoryGesture } from "./history.ts";
@@ -14,16 +15,12 @@ import {
   seriesSnapshot,
 } from "./store.ts";
 import { createElement } from "react";
-import { createSidebar } from "./sidebar.ts";
+import { createSidebar, SIDEBAR_PANE } from "./sidebar.ts";
 import { historyInstructions } from "./cli.ts";
 
 export default function registerCommitLog(hunk: HunkExtensionAPI): void {
   const sidebar = createSidebar();
   hunk.registerCliCommand({ name: "history", summary: "Read history extension instructions", usage: "<instructions|help>" }, historyInstructions);
-  hunk.events.on("hunk-history:files", (_event, ctx) => {
-    cancelHistoryGesture();
-    sidebar.show(ctx.panes, "files");
-  });
   const configured = configuredRange(hunk.config);
   const history = new HistoryController({ range: configured, limit: configuredLimit(hunk.config) });
 
@@ -72,17 +69,17 @@ export default function registerCommitLog(hunk: HunkExtensionAPI): void {
   };
 
   hunk.registerPane({
-    id: "commits",
-    title: "Commits",
+    id: SIDEBAR_PANE,
+    title: "Files / History",
+    replaces: "hunk:files",
     placement: "left",
     width: { preferred: 34, min: 22 },
     defaultOpen: false,
     // Hunk drops a left pane that would squeeze the diff below its minimum, so
     // the review keeps its width on a narrow terminal and loses this column.
-    available: () => historySnapshot().root !== null,
-    component: (props) => createElement(CommitLogPane, {
+    component: (props) => createElement(BrowserPane, {
       ...props,
-      onFiles: () => hunk.events.emit("hunk-history:files", null),
+      sidebar,
       onMore: () => { void history.refresh(true); },
     }),
   });
@@ -105,7 +102,7 @@ export default function registerCommitLog(hunk: HunkExtensionAPI): void {
   // One pane per rung of the ladder: the expand key opens whichever one holds
   // this commit's message. Hunk still clamps a rung to the rows left after the
   // review keeps its five, so a message longer than the screen fills it and
-  // reports the remainder.
+  // keeps the remaining body scrollable.
   for (const rows of EXPANDED_RUNGS) {
     hunk.registerPane({
       id: expandedPane(rows),
@@ -117,23 +114,21 @@ export default function registerCommitLog(hunk: HunkExtensionAPI): void {
     });
   }
 
-  hunk.registerCommand({ id: "toggle", title: "Toggle history", key: "h" }, (ctx) => {
-    if (historySnapshot().root === null) {
-      ctx.notify("History requires a Git repository", "info");
-      return;
-    }
+  hunk.registerCommand({ id: "toggle", title: "Switch Files / History", key: "h" }, () => {
     cancelHistoryGesture();
-    sidebar.toggleHistory(ctx.panes);
+    sidebar.toggleTab();
   });
 
-  hunk.registerCommand({ id: "files", title: "Toggle Files exclusively" }, (ctx) => {
-    cancelHistoryGesture();
-    sidebar.toggleFiles(ctx.panes);
+  hunk.registerCommand({ id: "files", title: "Toggle sidebar" }, (ctx) => {
+    sidebar.toggleSidebar(ctx.panes);
   });
 
   hunk.registerCommand({ id: "scope", title: "Choose history scope" }, chooseScope);
   hunk.registerCommand({ id: "refresh", title: "Refresh commit history" }, async () => { await history.refresh(); });
-  hunk.registerCommand({ id: "older", title: "Load older commits" }, async () => { await history.refresh(true); });
+  hunk.registerCommand({ id: "older", title: "Load older commits" }, async (ctx) => {
+    if (!historySnapshot().hasMore) { ctx.notify("All commits in this scope are loaded", "info"); return; }
+    await history.refresh(true);
+  });
   for (const value of ["staged", "unstaged", "all"] as const) {
     hunk.registerCommand({ id: value, title: `Review ${value === "all" ? "all uncommitted changes" : value + " changes"}` }, (ctx) => {
       cancelHistoryGesture();
@@ -151,6 +146,7 @@ export default function registerCommitLog(hunk: HunkExtensionAPI): void {
   }
 
   let expanded = false;
+  let expandedMessagePane = expandedPane(EXPANDED_RUNGS[0]!);
 
   /** Show the message at one size, closing every pane that held the other. */
   const showMessageAt = (ctx: { panes: ExtensionPaneControls }, next: boolean): void => {
@@ -162,7 +158,8 @@ export default function registerCommitLog(hunk: HunkExtensionAPI): void {
     }
     if (next) {
       ctx.panes.close(panes.collapsed);
-      ctx.panes.open(panes.expanded);
+      expandedMessagePane = panes.expanded;
+      ctx.panes.open(expandedMessagePane);
     } else {
       ctx.panes.open(panes.collapsed);
     }
@@ -171,7 +168,7 @@ export default function registerCommitLog(hunk: HunkExtensionAPI): void {
 
   hunk.registerCommand({ id: "message", title: "Toggle the commit message", key: "i" }, (ctx) => {
     const panes = messagePanes(seriesSnapshot().message);
-    ctx.panes.toggle(expanded ? panes.expanded : panes.collapsed);
+    ctx.panes.toggle(expanded ? expandedMessagePane : panes.collapsed);
   });
 
   hunk.registerCommand(
@@ -183,16 +180,8 @@ export default function registerCommitLog(hunk: HunkExtensionAPI): void {
     },
   );
 
-  // A step to another commit brings a message of another length, so the rung
-  // that fit the last one is the wrong pane to leave open.
-  hunk.on("changeset_loaded", (_event, ctx) => {
-    if (ctx.panes.isOpen("commits")) {
-      sidebar.show(ctx.panes, historySnapshot().root === null ? "files" : "commits");
-    }
-    if (expanded && hasMessage()) {
-      showMessageAt(ctx, true);
-    }
-  });
+  // Content reloads do not reopen hidden views, change tabs, or choose a new
+  // message pane id. Hunk retains dragged dimensions on that stable id.
 
   // `]` and `[` are already next and previous hunk, and a built-in keeps a
   // chord an extension asks for, so stepping between commits gets n and p.
@@ -225,7 +214,7 @@ export default function registerCommitLog(hunk: HunkExtensionAPI): void {
   // Opening the pane reveals the area, which `defaultOpen` alone does not do,
   // so the commit list is there at the width a terminal usually has.
   hunk.on("startup", (_event, ctx) => {
-    if (historySnapshot().root !== null) sidebar.show(ctx.panes, "commits");
+    sidebar.show(ctx.panes, historySnapshot().root === null ? "files" : "history");
     history.start();
   });
   hunk.on("session_reload", () => { void history.refresh(); });

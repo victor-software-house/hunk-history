@@ -5,10 +5,13 @@ import { testRender } from "@opentui/react/test-utils";
 import type { TestRenderer } from "@opentui/core/testing";
 import type { ExtensionPaneProps } from "hunkdiff/extension";
 import { publishSeries, selectedRange, seriesSnapshot } from "../store.ts";
-import { cancelHistoryGesture, rememberHistoryScroll, historySnapshot } from "../history.ts";
+import { cancelHistoryGesture, rememberHistoryScroll, rememberHistoryReveal, historySnapshot } from "../history.ts";
 import { resetPending, resetSessionId, type SessionDeps } from "../session.ts";
 import { CommitLogPane } from "../pane.tsx";
 import { ScrollBoxRenderable } from "@opentui/core";
+import { BrowserPane } from "../browser-pane.tsx";
+import { MessagePane } from "../pane.tsx";
+import { createSidebar } from "../sidebar.ts";
 
 const requested: (readonly string[])[] = [];
 let renderer: TestRenderer | undefined;
@@ -17,7 +20,6 @@ const commits = Array.from({ length: 100 }, (_, index) => ({
   subject: `Change ${index + 1}`, baseSha: String(index).padStart(40, "0"),
 }));
 const warnings: string[] = [];
-let filesShown = 0;
 const props: ExtensionPaneProps = {
   width: 34, height: 12, placement: "left", files: [], selectedFileId: null,
   selectedHunkIndex: null, currentLine: null,
@@ -48,16 +50,16 @@ function deps(reload: (args: readonly string[]) => Promise<string | null> = asyn
 }
 
 beforeEach(() => {
-  resetPending(); resetSessionId(); requested.length = 0; warnings.length = 0; filesShown = 0;
+  resetPending(); resetSessionId(); requested.length = 0; warnings.length = 0;
   publishSeries({ commits, position: 0, commit: commits[0], range: null, message: null, scope: "HEAD" });
   cancelHistoryGesture();
   rememberHistoryScroll(0);
+  rememberHistoryReveal(null);
 });
 afterEach(() => { act(() => { renderer?.destroy(); }); });
 
 async function pane(session = deps(), width = 34) {
-  const setup = await testRender(<CommitLogPane {...props} width={width} session={session}
-    onFiles={() => { filesShown++; }} />, { width, height: 12 });
+  const setup = await testRender(<CommitLogPane {...props} width={width} session={session} />, { width, height: 12 });
   renderer = setup.renderer;
   const renderFrame = async () => {
     await act(async () => { await setup.renderOnce(); });
@@ -148,7 +150,7 @@ test("Escape and external review replacement cancel the gesture, not the loaded 
   assert.equal(seriesSnapshot().commit?.sha, commits[2]!.sha);
 });
 
-test("working-state rows select without erasing history, Files remains exclusive", async () => {
+test("working-state badges select without erasing history", async () => {
   const ui = await pane();
   await ui.clickId("review-staged");
   assert.deepEqual(requested.at(-1), ["diff", "--staged", "--watch"]);
@@ -156,8 +158,7 @@ test("working-state rows select without erasing history, Files remains exclusive
   assert.deepEqual(requested.at(-1), ["diff", "--watch"]);
   assert.equal(seriesSnapshot().commits.length, 100);
   await ui.double(1);
-  await ui.clickId("show-files");
-  assert.equal(filesShown, 1);
+  await ui.clickId("review-staged");
   assert.doesNotMatch(ui.captureCharFrame(), /End · Esc/);
 });
 
@@ -259,7 +260,7 @@ test("working-state reload remount keeps the browsed history viewport", async ()
   assert.ok(view instanceof ScrollBoxRenderable);
   assert.ok(view.scrollTop > 0, JSON.stringify({ saved: historySnapshot().scrollTop, top: view.scrollTop, scroll: view.scrollHeight, content: view.content.height, viewport: view.viewport.height }));
   assert.match(ui.captureCharFrame(), /Change 91/);
-  assert.match(ui.captureCharFrame(), /▸ Staged/);
+  assert.match(ui.captureCharFrame(), /▸\[S\] Staged/);
 });
 
 test("the second click survives a host remount between its press and release", async () => {
@@ -275,4 +276,68 @@ test("the second click survives a host remount between its press and release", a
   assert.match(ui.captureCharFrame(), /End · Esc/);
   await ui.click(4);
   assert.deepEqual(requested.at(-1), ["diff", selectedRange(seriesSnapshot(), 1, 4)!.revisionRange]);
+});
+
+for (const width of [22, 34, 60]) {
+  test(`owned tabs hover, select native files and preserve scroll at ${width} columns`, async () => {
+    const sidebar = createSidebar();
+    const selected: string[] = [];
+    const files = Array.from({ length: 200 }, (_, index) => ({
+      id: `file-${index}`, path: `src/group/file-${index}.ts`, patch: "", metadata: {}, agent: null,
+      stats: { additions: index + 1, deletions: 0 }, changeType: "change" as const,
+    }));
+    const ui = await testRender(<BrowserPane {...props} width={width} files={files} selectedFileId={null}
+      actions={{ ...props.actions, selectFile: (id) => { selected.push(id); } }} sidebar={sidebar} onMore={() => {}} />, { width, height: 12 });
+    renderer = ui.renderer;
+    const draw = async () => { await act(async () => { await ui.renderOnce(); }); await act(async () => { await ui.renderOnce(); }); };
+    const click = async (id: string) => {
+      const row = ui.renderer.root.findDescendantById(id)!;
+      assert.ok(row, id);
+      await act(async () => { await ui.mockMouse.click(row.x + 2, row.y); }); await draw();
+    };
+    await draw();
+    const before = ui.captureSpans().lines[0];
+    await act(async () => { await ui.mockMouse.moveTo(2, 0); }); await draw();
+    assert.notDeepEqual(ui.captureSpans().lines[0], before);
+    assert.equal(sidebar.getTab(), "history");
+    assert.match(ui.captureCharFrame(), /All 100 loaded/);
+    const historyView = ui.renderer.root.findDescendantById("history-scroll");
+    assert.ok(historyView instanceof ScrollBoxRenderable);
+    await act(async () => { historyView.scrollTop = 40; }); await draw();
+    const historyTop = historyView.scrollTop;
+    await click("tab-files");
+    assert.equal(sidebar.getTab(), "files");
+    assert.match(ui.captureCharFrame(), /file-0/);
+    await click("history-file:file-0");
+    assert.deepEqual(selected, ["file-0"]);
+    assert.deepEqual(requested, []);
+    const view = ui.renderer.root.findDescendantById("files-scroll");
+    assert.ok(view instanceof ScrollBoxRenderable);
+    await act(async () => { view.scrollTop = 70; }); await draw();
+    const saved = view.scrollTop;
+    assert.ok(saved > 0);
+    assert.equal(ui.renderer.root.findDescendantById("history-file:file-199"), undefined);
+    await click("tab-history");
+    const historyAgain = ui.renderer.root.findDescendantById("history-scroll");
+    assert.ok(historyAgain instanceof ScrollBoxRenderable);
+    assert.equal(historyAgain.scrollTop, historyTop);
+    await click("tab-files");
+    const restored = ui.renderer.root.findDescendantById("files-scroll");
+    assert.ok(restored instanceof ScrollBoxRenderable);
+    assert.equal(restored.scrollTop, saved);
+  });
+}
+
+test("message body scrolls without changing its height or hiding the header", async () => {
+  publishSeries({ ...seriesSnapshot(), message: { author: "Ada", timestamp: "2026-01-01T00:00:00Z", body: Array.from({ length: 80 }, (_, i) => `Body line ${i}`).join("\n") } });
+  const ui = await testRender(<MessagePane {...props} height={6} />, { width: 34, height: 6 });
+  renderer = ui.renderer;
+  await act(async () => { await ui.renderOnce(); });
+  const view = ui.renderer.root.findDescendantById("commit-body-scroll");
+  assert.ok(view instanceof ScrollBoxRenderable);
+  assert.equal(view.height, 4);
+  await act(async () => { view.scrollTop = 60; await ui.renderOnce(); });
+  assert.match(ui.captureCharFrame(), /Body line 60/);
+  assert.match(ui.captureCharFrame(), /Ada/);
+  assert.equal(view.height, 4);
 });

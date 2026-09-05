@@ -65,24 +65,29 @@ Do not silently replace a pinned selection with a moving HEAD comparison.
 
 ## Extension behavior
 
-The checkout's compact-layout trial prioritizes subjects over hashes, keeps the
-commit/range heading visible while a separate status line changes, and defaults
-the message pane to three rows. Explicit messageRows configuration and i/I remain
-supported. This layout trial is not yet in the 0.0.3 release tag.
+The checkout trial owns a single Files/History pane. Tabs highlight on hover and
+switch immediately without replacing the comparison. Files uses a vendored native
+navigation projection and host selection actions, not a separate file or comment
+store. Each tab retains its scroll position. This trial is not yet in release 0.0.3.
 
-`h` opens history in place of Files, then restores Files only if it was visible
-before history opened. Otherwise closing history leaves both hidden. The explicit
-Files control and configured exclusive `s` toggle still select Files independently.
+`s` hides/shows the whole sidebar while retaining its active tab. `h` switches
+Files ↔ History without changing visibility. Native Files commands and existing
+`hunk-history.files` mappings both toggle the whole replacement pane.
 
-The live-approved history implementation follows HEAD independently of the selected diff;
-configured scopes remain explicit. History and working-state counts refresh without
-replacing the pinned review. Loading more history is paginated and rendering is
-windowed. An old selected commit can remain loaded outside the browsed scope.
+Working states have distinct `[S]`/`[W]` badges. The fixed footer offers Load older
+commits while more pages exist; otherwise All N loaded explains why pagination is
+unavailable. Loading comparison/history feedback occupies the existing status area.
+Commit bodies scroll at the user-chosen pane height. Commit changes do not resize
+it; `i` toggles visibility and `I` explicitly changes compact/expanded size.
+
+History follows HEAD independently of the selected diff; configured scopes remain
+explicit. Polling and pagination do not replace a pinned comparison. Rendering is
+windowed; an old selected commit may remain loaded outside the browsed scope.
 
 Single clicks dispatch immediately. Double-click arms a range, then the endpoint
 click applies it. The first click can load a commit; Hunk's App remount must not
-cancel the gesture. Escape and explicit view switches cancel it. No extra Range
-button or modifier gesture is required.
+cancel the gesture. Escape and explicit tab switches cancel it. No Range button
+or modifier gesture is required.
 
 History scope, refresh, older pages and live comparisons are available through
 Hunk's Extensions menu. Those are **UI command ids, not daemon subcommands**.

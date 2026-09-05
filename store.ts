@@ -95,17 +95,9 @@ export function expandedPane(rows: number): string {
   return `messageExpanded${rows}`;
 }
 
-/**
- * The rows a message needs: the two heading rows, then the body after a blank.
- *
- * Counted from the body's own lines rather than from what the pane will paint,
- * because the pane's width is not known until it renders. A commit body is
- * already hard-wrapped by whoever wrote it, so on any terminal wide enough for
- * a diff this is exact; where a line does wrap, the pane is one rung short and
- * says so with its own count.
- */
+/** Estimate an explicitly requested expansion; wrapped overflow remains scrollable. */
 export function messageRowsNeeded(message: CommitMessage): number {
-  const body = message.body === "" ? 0 : message.body.split("\n").length + 1;
+  const body = message.body === "" ? 0 : message.body.split("\n").length;
   return 2 + body;
 }
 

@@ -8,9 +8,11 @@ Developed and verified against Hunk **0.21.1** and its published extension API *
 with Git on PATH. **0.0.3** includes live history, immediate clicks, preserved
 range gestures, and the agent instructions command.
 
-The current checkout also contains a **compact layout trial**, not yet included in
-release tag 0.0.3: subject-first rows, a stable heading with a separate status/scope
-line, and a three-row default message pane. Existing explicit sizes remain respected.
+The current checkout contains an **owned tabbed-sidebar trial**, not yet included
+in release tag 0.0.3. A single replacement pane contains Files and History tabs,
+with immediate switching, hover feedback and independent scroll positions. Native
+file navigation is [vendored with provenance](vendor/hunk/README.md); the host still
+owns file selection, diff rendering and comments. No Hunk application fork is required.
 
 ## Interaction
 
@@ -21,13 +23,16 @@ line, and a three-row default message pane. Existing explicit sizes remain respe
   including Hunk's full App remount, does not cancel the second click or armed range.
 - **Esc** cancels the gesture. Files/Commits switches and external review replacement
   also cancel it. No Range button, unusual key combination, drag selection or Apply step.
-- **Staged / Unstaged:** two compact rows above history select those comparisons.
-  Counts are changed paths, not hunks; a partly staged file can count in both rows.
-  Unstaged includes untracked files. Zero is a valid empty review, not a disabled action.
-- **Files / Commits:** `h` toggles history in one sidebar. Opening history hides
-  Files; closing it restores Files only if Files was visible when history opened.
-  Otherwise both remain hidden. `[Files]` explicitly opens the native file tree.
-  Default history width is 34 columns; narrow terminals may hide it.
+- **Staged / Unstaged:** themed `[S]` and `[W]` badges distinguish the two working
+  states from commit rows. Hover and active state highlight the full row. Counts
+  are changed paths, not hunks; a partly staged file can count in both rows.
+  Unstaged includes untracked files. Zero remains a valid empty review.
+- **Files / History tabs:** switch immediately without reloading the comparison.
+  Files keeps native tree/group ordering, status colors, rename labels and stats;
+  selecting a file navigates Hunk's existing review stream. Each tab retains scroll.
+- **Keyboard:** `s` hides/shows the whole sidebar, retaining the active tab.
+  `h` switches Files ↔ History without changing sidebar visibility. Default width
+  is 34 columns; narrow terminals may hide the sidebar.
 
 Requested selections paint immediately with `Loading`. The old diff remains until
 the reload succeeds; failures restore its selection. Reloads serialize and rapid
@@ -45,8 +50,10 @@ when the complete subject and SHA fit. Exact identity remains in the loaded mess
 
 History and staged/unstaged counts are checked asynchronously every 1.5 seconds,
 with serialized Git queries. Metadata is fetched in batches and only nearby rows
-are rendered. **Load older…** at the top fetches another page; `p` also fetches older
-history at the loaded edge. There is no total commit limit. `limit` is the page size
+are rendered. A fixed **Load older commits** footer stays reachable while scrolling;
+when exhausted, it reads **All N loaded**. The menu action reports exhaustion rather
+than silently doing nothing. `p` also fetches older history at the loaded edge.
+There is no total commit limit. `limit` is the page size
 (default 50, clamped to 1–500), not a cap on browsable history.
 
 The **Extensions** menu exposes **Choose history scope**: current branch, configured
@@ -73,8 +80,8 @@ commands. The separate CLI tree exposes instructions and help.
 | Key | Command id | Action |
 |:--|:--|:--|
 | `n` / `p` | `hunk-history.next` / `.previous` | Next / previous commit; no wrap |
-| `h` | `hunk-history.toggle` | Toggle history; restore prior Files visibility |
-| — | `hunk-history.files` | Close Commits, toggle Files |
+| `h` | `hunk-history.toggle` | Switch Files / History without changing visibility |
+| — | `hunk-history.files` | Toggle the whole sidebar (existing mappings remain valid) |
 | `i` | `hunk-history.message` | Toggle commit message |
 | `I` | `hunk-history.expand` | Fit/collapse message |
 | — | `hunk-history.scope` | Choose history scope |
@@ -95,22 +102,18 @@ A range is a **net tree diff**, not concatenated patches. Merge topology can inc
 effects not represented by the linear highlighted rows. Combined uncommitted changes
 are also a net comparison; staged and unstaged edits can cancel each other.
 
-To make native `s` exclusive with Commits, retain this explicit user-config override:
+The native `s` Files-role command follows our replacement pane, so no override is
+required. Existing `hunk-history.files = "s"` mappings perform the same whole-sidebar
+toggle. If removing that legacy mapping, also remove its
+`hunk.view.toggleFilesPane = false` entry to restore the native binding.
+`[` and `]` remain Hunk's hunk-navigation keys.
 
-```toml
-[keybindings]
-"hunk.view.toggleFilesPane" = false
-"hunk-history.files" = "s"
-```
-
-Without the extension that binding is unavailable; remove it to restore native `s`.
-Other explicit host pane commands are not intercepted. `[` and `]` remain Hunk's
-hunk-navigation keys.
-
-The message pane shows the author, timestamp with original UTC offset, and body.
-`messageRows` sets its initial height (3–60, default 3). Drag the divider to resize it. `I` picks
-among 8, 12, 18, 26, 36 and 50 rows; longer messages report omitted lines. No message
-scrolling is introduced.
+The message header shows commit identity, author and timestamp with original UTC
+offset. Its **body scrolls** inside the chosen pane height instead of dropping text.
+`messageRows` sets the initial height (3–60, default 3); drag the divider to resize.
+Commit changes retain that height. `i` hides/shows the current message pane; `I`
+explicitly chooses an expanded size or returns to compact mode. Expansion is not
+recomputed automatically when selecting another commit.
 
 ## Install or live-test
 

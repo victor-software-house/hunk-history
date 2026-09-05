@@ -15,12 +15,13 @@ export interface HistorySnapshot {
   click: { sha: string; at: number } | null;
   pressed: string | null;
   scrollTop: number;
+  revealedSha: string | null;
   /** Changes only when the repository/scope or an external review changes. */
   epoch: number;
 }
 let state: HistorySnapshot = {
   root: null, scope: "HEAD", loading: false, hasMore: false,
-  staged: 0, unstaged: 0, error: null, newCommits: 0, anchor: null, click: null, pressed: null, scrollTop: 0, epoch: 0,
+  staged: 0, unstaged: 0, error: null, newCommits: 0, anchor: null, click: null, pressed: null, scrollTop: 0, revealedSha: null, epoch: 0,
 };
 const listeners = new Set<() => void>();
 export const historySnapshot = () => state;
@@ -42,6 +43,7 @@ export function setHistoryGesture(anchor: string | null, click: HistorySnapshot[
 }
 export function setHistoryPressed(pressed: string | null): void { publish({ pressed }); }
 export function rememberHistoryScroll(scrollTop: number): void { publish({ scrollTop }); }
+export function rememberHistoryReveal(revealedSha: string | null): void { publish({ revealedSha }); }
 export function acknowledgeNewCommits(): void { publish({ newCommits: 0 }); }
 
 /** One controller owns async Git, scope and polling; history never reloads the selected diff. */
@@ -71,7 +73,7 @@ export class HistoryController {
     this.loaded = 0;
     publishSeries(EMPTY_SERIES);
     publish({ root, scope: this.options.range ?? "HEAD", hasMore: false, loading: false,
-      staged: 0, unstaged: 0, error: null, newCommits: 0, anchor: null, click: null, pressed: null, scrollTop: 0, epoch: state.epoch + 1 });
+      staged: 0, unstaged: 0, error: null, newCommits: 0, anchor: null, click: null, pressed: null, scrollTop: 0, revealedSha: null, epoch: state.epoch + 1 });
     if (!root) return false;
     await this.refresh();
     return true;
@@ -82,7 +84,7 @@ export class HistoryController {
     this.generation++;
     this.fingerprint = null;
     this.loaded = 0;
-    publish({ scope: ref, epoch: state.epoch + 1, error: null, newCommits: 0, anchor: null, click: null, pressed: null, scrollTop: 0 });
+    publish({ scope: ref, epoch: state.epoch + 1, error: null, newCommits: 0, anchor: null, click: null, pressed: null, scrollTop: 0, revealedSha: null });
     await this.refresh();
   }
 

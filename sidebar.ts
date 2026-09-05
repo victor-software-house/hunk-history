@@ -1,37 +1,34 @@
 import type { ExtensionPaneControls } from "hunkdiff/extension";
 
-/** One review runtime remembers which pane History temporarily replaced. */
+export const SIDEBAR_PANE = "browser";
+export type SidebarTab = "files" | "history";
+
+/** One sidebar owns tab selection and independent scroll memory. */
 export function createSidebar() {
-  let restoreFiles = false;
-
-  function show(panes: ExtensionPaneControls, view: "files" | "commits"): void {
-    if (view === "commits") {
-      if (!panes.isOpen("commits")) restoreFiles = panes.isOpen("hunk:files");
-      panes.close("hunk:files");
-      panes.open("commits");
-    } else {
-      restoreFiles = false;
-      panes.close("commits");
-      panes.open("hunk:files");
-    }
+  let tab: SidebarTab = "history";
+  let filesScroll = 0;
+  let selectedFile: string | null = null;
+  const listeners = new Set<() => void>();
+  function publish(next: SidebarTab) {
+    if (tab === next) return;
+    tab = next;
+    for (const listener of listeners) listener();
   }
-
-  function toggleHistory(panes: ExtensionPaneControls): void {
-    if (!panes.isOpen("commits")) {
-      show(panes, "commits");
-      return;
-    }
-    panes.close("commits");
-    if (restoreFiles) panes.open("hunk:files");
-    restoreFiles = false;
+  function show(panes: ExtensionPaneControls, next: SidebarTab): void {
+    publish(next);
+    panes.open(SIDEBAR_PANE);
   }
-
-  /** Files' shortcut must not bypass the history pane's exclusion rule. */
-  function toggleFiles(panes: ExtensionPaneControls): void {
-    restoreFiles = false;
-    panes.close("commits");
-    panes.toggle("hunk:files");
-  }
-
-  return { show, toggleHistory, toggleFiles };
+  return {
+    show,
+    toggleTab() { publish(tab === "files" ? "history" : "files"); },
+    toggleSidebar(panes: ExtensionPaneControls) { panes.toggle(SIDEBAR_PANE); },
+    getTab: () => tab,
+    selectTab: publish,
+    subscribe(listener: () => void) { listeners.add(listener); return () => { listeners.delete(listener); }; },
+    getSelectedFile: () => selectedFile,
+    rememberSelectedFile(id: string | null) { selectedFile = id; },
+    getFilesScroll: () => filesScroll,
+    rememberFilesScroll(top: number) { filesScroll = top; },
+  };
 }
+export type SidebarController = ReturnType<typeof createSidebar>;

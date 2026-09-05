@@ -222,8 +222,8 @@ function message(bodyLines: number) {
 
 test("a message needs its heading rows plus its body", () => {
   assert.equal(messageRowsNeeded(message(0)), 2, "subject and author, no blank line");
-  assert.equal(messageRowsNeeded(message(1)), 4, "heading, blank, one line");
-  assert.equal(messageRowsNeeded(message(30)), 33);
+  assert.equal(messageRowsNeeded(message(1)), 3, "two heading rows and one body line");
+  assert.equal(messageRowsNeeded(message(30)), 32);
 });
 
 test("the pane that fits is the smallest rung that holds the message", () => {
