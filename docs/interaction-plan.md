@@ -2,6 +2,11 @@
 
 ## Current operator decisions
 
+- The operator approved the complete tabbed sidebar for release 0.0.4. Working-state
+  letters must match Files status styling: plain colored `S`/`W`, without brackets
+  that suggest keyboard shortcuts. Full-width tab backgrounds and the half-cell
+  selected-file marker are included.
+
 - Single clicks must load immediately. Preserve double-click to arm a range, then
   one endpoint click to apply it. Do not add a Range button, modifier gesture or
   separate Apply step. Earlier control-heavy approaches were rejected.

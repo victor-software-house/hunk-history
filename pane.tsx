@@ -171,7 +171,7 @@ export function CommitLogPane({ actions, width, height, theme, session, onMore }
         const tone = kind === "staged" ? theme.badgeAdded : theme.fileModified;
         return <box key={kind} id={`review-${kind}`} style={{ height: 1, flexShrink: 0, width, flexDirection: "row", backgroundColor: background }}
           {...handlers(kind, () => { cancel(); requestWorking(kind, actions.notify, session); })}>
-          <text selectable={false} fg={tone} bg={background} style={{ width: 5, height: 1 }}>{active ? "▸" : " "}{kind === "staged" ? "[S] " : "[W] "}</text>
+          <text selectable={false} fg={tone} bg={background} style={{ width: 3, height: 1 }}>{active ? "▸" : " "}{kind === "staged" ? "S " : "W "}</text>
           <text selectable={false} fg={theme.text} bg={background} style={{ flexGrow: 1, height: 1 }}><b>{kind === "staged" ? "Staged" : "Unstaged"}</b></text>
           <text selectable={false} fg={tone} bg={background} style={{ height: 1 }}>{history[kind]} </text>
         </box>;

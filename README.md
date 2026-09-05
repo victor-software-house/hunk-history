@@ -5,11 +5,10 @@ between staged and unstaged changes in [Hunk](https://hunk.dev). Built on
 [Sadick Mwakio's hunk-commit-log](https://github.com/sadick254/hunk-commit-log).
 
 Developed and verified against Hunk **0.21.1** and its published extension API **16**,
-with Git on PATH. **0.0.3** includes live history, immediate clicks, preserved
-range gestures, and the agent instructions command.
+with Git on PATH. **0.0.4** includes live history, immediate clicks, preserved
+range gestures, the agent instructions command, and the approved tabbed sidebar.
 
-The current checkout contains an **owned tabbed-sidebar trial**, not yet included
-in release tag 0.0.3. A single replacement pane contains Files and History tabs,
+A single replacement pane contains Files and History tabs,
 with immediate switching, hover feedback and independent scroll positions. Native
 file navigation is [vendored with provenance](vendor/hunk/README.md); the host still
 owns file selection, diff rendering and comments. No Hunk application fork is required.
@@ -23,8 +22,9 @@ owns file selection, diff rendering and comments. No Hunk application fork is re
   including Hunk's full App remount, does not cancel the second click or armed range.
 - **Esc** cancels the gesture. Files/Commits switches and external review replacement
   also cancel it. No Range button, unusual key combination, drag selection or Apply step.
-- **Staged / Unstaged:** themed `[S]` and `[W]` badges distinguish the two working
-  states from commit rows. Hover and active state highlight the full row. Counts
+- **Staged / Unstaged:** plain colored `S` (staged) and `W` (working tree) status
+  letters distinguish the two working states; they are not keyboard shortcuts.
+  Hover and active state highlight the full row. Counts
   are changed paths, not hunks; a partly staged file can count in both rows.
   Unstaged includes untracked files. Zero remains a valid empty review.
 - **Files / History tabs:** switch immediately without reloading the comparison.
@@ -120,12 +120,12 @@ recomputed automatically when selecting another commit.
 Install the approved release:
 
 ```sh
-hunk extension install victor-software-house/hunk-history@v0.0.3
+hunk extension install victor-software-house/hunk-history@v0.0.4
 ```
 
 For an existing unpinned installation, run `hunk extension update hunk-history`.
 Restart Hunk after updating to load the new extension code; preserve any review
-notes before closing a window. Confirm `hunk extension list` reports 0.0.3 and
+notes before closing a window. Confirm `hunk extension list` reports 0.0.4 and
 `hunk history --help` lists the instruction command.
 
 Test this checkout **without replacing the installed release**, from a Git repository:
@@ -174,4 +174,4 @@ suite, including full-pane remounts, immediate dispatch, request ordering, scrol
 hover and failures. No new dependencies or test framework are needed.
 
 [Trial plan](docs/live-history-plan.md) · [Interaction decisions](docs/interaction-plan.md).
-The live-approved interaction and instruction discovery ship together in 0.0.3.
+The live-approved interaction and instruction discovery ship together in 0.0.4.

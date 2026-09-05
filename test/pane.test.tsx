@@ -152,6 +152,13 @@ test("Escape and external review replacement cancel the gesture, not the loaded 
 
 test("working-state badges select without erasing history", async () => {
   const ui = await pane();
+  assert.match(ui.captureCharFrame(), / S Staged/);
+  assert.match(ui.captureCharFrame(), / W Unstaged/);
+  assert.doesNotMatch(ui.captureCharFrame(), /\[[SW]\]/);
+  for (const [kind, tone] of [["staged", props.theme.badgeAdded], ["unstaged", props.theme.fileModified]] as const) {
+    const row = ui.renderer.root.findDescendantById(`review-${kind}`)!;
+    assert.deepEqual(ui.captureSpans().lines[row.y]!.spans[0]!.fg, RGBA.fromHex(tone));
+  }
   await ui.clickId("review-staged");
   assert.deepEqual(requested.at(-1), ["diff", "--staged", "--watch"]);
   await ui.clickId("review-unstaged");
@@ -260,7 +267,7 @@ test("working-state reload remount keeps the browsed history viewport", async ()
   assert.ok(view instanceof ScrollBoxRenderable);
   assert.ok(view.scrollTop > 0, JSON.stringify({ saved: historySnapshot().scrollTop, top: view.scrollTop, scroll: view.scrollHeight, content: view.content.height, viewport: view.viewport.height }));
   assert.match(ui.captureCharFrame(), /Change 91/);
-  assert.match(ui.captureCharFrame(), /▸\[S\] Staged/);
+  assert.match(ui.captureCharFrame(), /▸S Staged/);
 });
 
 test("the second click survives a host remount between its press and release", async () => {

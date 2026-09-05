@@ -65,16 +65,17 @@ Do not silently replace a pinned selection with a moving HEAD comparison.
 
 ## Extension behavior
 
-The checkout trial owns a single Files/History pane. Tabs highlight on hover and
+Version 0.0.4 owns a single Files/History pane. Tabs highlight on hover and
 switch immediately without replacing the comparison. Files uses a vendored native
 navigation projection and host selection actions, not a separate file or comment
-store. Each tab retains its scroll position. This trial is not yet in release 0.0.3.
+store. Each tab retains its scroll position.
 
 `s` hides/shows the whole sidebar while retaining its active tab. `h` switches
 Files ↔ History without changing visibility. Native Files commands and existing
 `hunk-history.files` mappings both toggle the whole replacement pane.
 
-Working states have distinct `[S]`/`[W]` badges. The fixed footer offers Load older
+Working states use plain colored `S` (staged) / `W` (working tree) status letters,
+not keyboard shortcuts. The fixed footer offers Load older
 commits while more pages exist; otherwise All N loaded explains why pagination is
 unavailable. Loading comparison/history feedback occupies the existing status area.
 Commit bodies scroll at the user-chosen pane height. Commit changes do not resize
@@ -114,6 +115,6 @@ Read [the capability audit](https://github.com/victor-software-house/hunk-histor
 agent integration, note monitoring, or review control. It distinguishes published
 API 16 from unreleased main API 18 and records the exact official source inspected.
 
-Version 0.0.3 includes live history and this instructions command. Earlier 0.0.2
+Version 0.0.4 includes live history and this instructions command. Earlier 0.0.2
 installations do not. Check `hunk extension list` and command availability; restart
 an existing Hunk window to load updated extension code, preserving notes first.
