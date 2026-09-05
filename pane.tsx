@@ -1,25 +1,76 @@
-import { useEffect, useRef, useSyncExternalStore, type ReactNode } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { MouseButton, type MouseEvent as TuiMouseEvent, type ScrollBoxRenderable } from "@opentui/core";
+import { useKeyboard } from "@opentui/react";
 import type { ExtensionPaneProps } from "hunkdiff/extension";
 import { messageRows, type Tone } from "./highlight.ts";
 import { commitRow, seriesHeading } from "./row.ts";
-import { requestCommit, type SessionDeps } from "./session.ts";
-import { isSelectedIndex, seriesSnapshot, subscribeSeries } from "./store.ts";
+import { requestCommit, requestRange, type SessionDeps } from "./session.ts";
+import { isSelectedIndex, selectedRange, seriesSnapshot, subscribeSeries } from "./store.ts";
 
 export interface CommitLogPaneProps extends ExtensionPaneProps {
   session?: SessionDeps;
   onFiles(): void;
-  onActions(sha: string): void;
 }
+
+const DOUBLE_CLICK_MS = 300;
 
 function rowId(index: number): string {
   return `commit-log-row-${index}`;
 }
 
-export function CommitLogPane({ actions, width, height, theme, session, onFiles, onActions }: CommitLogPaneProps): ReactNode {
+export function CommitLogPane({ actions, width, height, theme, session, onFiles }: CommitLogPaneProps): ReactNode {
   const snapshot = useSyncExternalStore(subscribeSeries, seriesSnapshot);
   const { commits, position, range } = snapshot;
   const scroll = useRef<ScrollBoxRenderable | null>(null);
+  const [anchor, setAnchor] = useState<string | null>(null);
+  const [filesHovered, setFilesHovered] = useState(false);
+  const pressed = useRef<string | null>(null);
+  const click = useRef<{ sha: string; timer: ReturnType<typeof setTimeout> } | null>(null);
+
+  const cancelClick = () => {
+    if (click.current) clearTimeout(click.current.timer);
+    click.current = null;
+  };
+
+  useEffect(() => {
+    setAnchor(null);
+    pressed.current = null;
+    return cancelClick;
+  }, [snapshot]);
+
+  useKeyboard((key) => {
+    if (key.name !== "escape" || (anchor === null && click.current === null)) return;
+    key.stopPropagation();
+    cancelClick();
+    setAnchor(null);
+  });
+
+  const choose = (sha: string) => {
+    if (anchor !== null) {
+      cancelClick();
+      const start = commits.findIndex((commit) => commit.sha === anchor);
+      const end = commits.findIndex((commit) => commit.sha === sha);
+      setAnchor(null);
+      if (start === end) requestCommit(sha, actions.notify, session);
+      else {
+        const selection = selectedRange(snapshot, start, end);
+        if (selection) requestRange(selection, actions.notify, session);
+      }
+      return;
+    }
+    if (click.current?.sha === sha) {
+      cancelClick();
+      setAnchor(sha);
+      return;
+    }
+    cancelClick();
+    click.current = { sha, timer: setTimeout(() => {
+      click.current = null;
+      if (seriesSnapshot() !== snapshot) return;
+      if (range !== null || commits[position ?? -1]?.sha !== sha)
+        requestCommit(sha, actions.notify, session);
+    }, DOUBLE_CLICK_MS) };
+  };
 
   useEffect(() => {
     if (position !== null) scroll.current?.scrollChildIntoView(rowId(position));
@@ -28,25 +79,28 @@ export function CommitLogPane({ actions, width, height, theme, session, onFiles,
   return (
     <box style={{ width, height, overflow: "hidden", backgroundColor: theme.panel, flexDirection: "column" }}>
       <box style={{ height: 1, flexShrink: 0, flexDirection: "row", backgroundColor: theme.panel }}>
-        <text wrapMode="none" selectable={false} fg={theme.muted} bg={theme.panel}
-          style={{ width: Math.max(0, width - 9), height: 1, flexShrink: 0 }}>
-          {seriesHeading(position, commits.length, Math.max(0, width - 9), range)}
-        </text>
-        <text id="show-files" wrapMode="none" selectable={false} fg={theme.muted} bg={theme.panel}
-          style={{ width: 6, flexShrink: 0 }}
+        <text id="show-files" wrapMode="none" selectable={false}
+          fg={filesHovered ? theme.text : theme.muted}
+          bg={filesHovered ? theme.accentMuted : theme.panelAlt}
+          style={{ width: 7, height: 1, flexShrink: 0 }}
+          onMouseOver={() => setFilesHovered(true)} onMouseOut={() => setFilesHovered(false)}
           onMouseDown={(event: TuiMouseEvent) => {
             if (event.button !== MouseButton.LEFT) return;
             event.stopPropagation();
+            pressed.current = "files";
+          }}
+          onMouseUp={(event: TuiMouseEvent) => {
+            event.stopPropagation();
+            if (event.button !== MouseButton.LEFT || pressed.current !== "files") return;
+            pressed.current = null;
+            cancelClick();
+            setAnchor(null);
             onFiles();
-          }}>{"Files "}</text>
-        <text id="range-actions" wrapMode="none" selectable={false} fg={theme.muted} bg={theme.panel}
-          style={{ width: 3, flexShrink: 0 }}
-          onMouseDown={(event: TuiMouseEvent) => {
-            if (event.button !== MouseButton.LEFT) return;
-            event.stopPropagation();
-            const commit = position === null ? undefined : commits[position];
-            if (commit) onActions(commit.sha);
-          }}>{" ⋯ "}</text>
+          }}>{"[Files]"}</text>
+        <text wrapMode="none" selectable={false} fg={anchor ? theme.text : theme.muted} bg={theme.panel}
+          style={{ width: Math.max(0, width - 9), height: 1, flexShrink: 0 }}>
+          {anchor ? " End · Esc" : seriesHeading(position, commits.length, Math.max(0, width - 9), range)}
+        </text>
       </box>
       <scrollbox ref={scroll} focused={false} scrollY={true}
         style={{ flexGrow: 1, backgroundColor: theme.panel }}
@@ -56,12 +110,20 @@ export function CommitLogPane({ actions, width, height, theme, session, onFiles,
         {commits.map((commit, index) => (
           <text key={commit.sha} id={rowId(index)} wrapMode="none" selectable={false}
             style={{ height: 1, flexShrink: 0, width: "100%" }}
-            fg={theme.text} bg={isSelectedIndex(snapshot, index) ? theme.selectedHunk : theme.panel}
+            fg={theme.text} bg={anchor === commit.sha ? theme.accentMuted : isSelectedIndex(snapshot, index) ? theme.selectedHunk : theme.panel}
             onMouseDown={(event: TuiMouseEvent) => {
-              if (event.button !== MouseButton.LEFT && event.button !== MouseButton.RIGHT) return;
+              if (event.button !== MouseButton.LEFT) return;
               event.stopPropagation();
-              if (event.button === MouseButton.RIGHT) onActions(commit.sha);
-              else if (range !== null || position !== index) requestCommit(commit.sha, actions.notify, session);
+              event.preventDefault();
+              pressed.current = commit.sha;
+            }}
+            onMouseDrag={() => { pressed.current = null; cancelClick(); }}
+            onMouseUp={(event: TuiMouseEvent) => {
+              if (event.button !== MouseButton.LEFT) return;
+              event.stopPropagation();
+              if (pressed.current !== commit.sha) return;
+              pressed.current = null;
+              if (!event.isDragging) choose(commit.sha);
             }}>
             {commitRow(commit, width, { active: index === position, selected: isSelectedIndex(snapshot, index) })}
           </text>

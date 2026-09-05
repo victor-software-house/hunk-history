@@ -2,12 +2,11 @@ import assert from "node:assert/strict";
 import { afterEach, beforeEach, test } from "node:test";
 import { act } from "react";
 import { testRender } from "@opentui/react/test-utils";
-import { MouseButtons, type MouseButton, type TestRenderer } from "@opentui/core/testing";
+import type { TestRenderer } from "@opentui/core/testing";
 import type { ExtensionPaneProps } from "hunkdiff/extension";
-import { publishRange, publishSeries, selectedRange, seriesSnapshot } from "../store.ts";
+import { publishSeries, selectedRange, seriesSnapshot } from "../store.ts";
 import { resetPending, resetSessionId, type SessionDeps } from "../session.ts";
 import { CommitLogPane } from "../pane.tsx";
-import { showRangeActions, type RangeDraft } from "../range-actions.ts";
 
 const requested: (readonly string[])[] = [];
 const session: SessionDeps = {
@@ -33,8 +32,6 @@ const commits = Array.from({ length: 20 }, (_, index) => ({
   baseSha: String(index).padStart(40, "0"),
 }));
 const warnings: string[] = [];
-const draft: RangeDraft = { start: null, end: null };
-let answer: string | null = null;
 let filesShown = 0;
 const props: ExtensionPaneProps = {
   width: 34,
@@ -79,150 +76,114 @@ beforeEach(() => {
   resetSessionId();
   requested.length = 0;
   warnings.length = 0;
-  draft.start = null;
-  draft.end = null;
-  answer = null;
   filesShown = 0;
   publishSeries({ commits, position: 0, range: null, message: null, scope: "main..topic" });
 });
 
 async function pane(deps: SessionDeps = session, width = props.width) {
   const setup = await testRender(<CommitLogPane {...props} width={width} session={deps}
-    onFiles={() => { filesShown += 1; }}
-    onActions={(sha) => { void showRangeActions(sha, draft, {
-      notify: props.actions.notify,
-      dialogs: { select: async ({ options }) => {
-        if (answer !== null) assert.ok(options.includes(answer), `missing menu option ${answer}`);
-        return answer;
-      } },
-    }, deps); }} />, {
-    width,
-    height: 12,
-  });
+    onFiles={() => { filesShown += 1; }} />, { width, height: 12 });
   renderer = setup.renderer;
   await setup.renderOnce();
   return {
     ...setup,
-    async click(id: string, button: MouseButton = MouseButtons.LEFT) {
-      const target = setup.renderer.root.findDescendantById(id);
-      assert.ok(target, `missing control ${id}`);
-      assert.ok(target.y >= 0 && target.y < 12, `${id} is outside the visible pane`);
+    async click(index: number, double = false) {
+      const row = setup.renderer.root.findDescendantById(`commit-log-row-${index}`);
+      assert.ok(row);
+      assert.ok(row.y >= 1 && row.y < 12);
       await act(async () => {
-        await setup.mockMouse.click(target.x + 1, target.y, button);
+        if (double) await setup.mockMouse.doubleClick(row.x + 2, row.y);
+        else await setup.mockMouse.click(row.x + 2, row.y);
       });
+      await setup.renderOnce();
+    },
+    async settle() {
+      await act(async () => { await new Promise((resolve) => setTimeout(resolve, 330)); });
       await setup.renderOnce();
     },
   };
 }
 
-test("compact header leaves eleven full-width rows and Files switches view", async () => {
-  const ui = await pane();
-  const frame = ui.captureCharFrame();
-  assert.match(frame, /Files.*⋯/);
-  assert.doesNotMatch(frame, /Start|End|not set|Scope|\[Apply\]/);
-  assert.equal(ui.renderer.root.findDescendantById("commit-log-row-0")?.y, 1);
-  assert.equal(ui.renderer.root.findDescendantById("commit-log-row-10")?.y, 11);
-  assert.equal(ui.renderer.root.findDescendantById("commit-log-row-0")?.width, 34);
-  await ui.click("show-files");
-  assert.equal(filesShown, 1);
-  assert.deepEqual(requested, []);
-});
+for (const [start, end] of [[0, 3], [3, 0], [2, 2]] as const) {
+  test(`double-click ${start}, click ${end}: inclusive range without an intermediate reload`, async () => {
+    const ui = await pane();
+    await ui.click(start, true);
+    await ui.settle();
+    assert.deepEqual(requested, []);
+    assert.match(ui.captureCharFrame(), /End · Esc/);
+    await ui.click(end);
+    await ui.settle();
+    assert.deepEqual(requested, [start === end ? ["show", commits[start]!.sha]
+      : ["diff", selectedRange(seriesSnapshot(), start, end)!.revisionRange]]);
+    assert.equal(seriesSnapshot().range, null, "loaded state changes only on successful publication");
+    assert.doesNotMatch(ui.captureCharFrame(), /End · Esc/);
+  });
+}
 
-test("menu endpoints do not load until Apply; Clear returns to one commit", async () => {
+test("single clicks navigate only after the double-click interval", async () => {
   const ui = await pane();
-  answer = "Start here";
-  await ui.click("range-actions");
-  await ui.click("commit-log-row-2");
-  requested.length = 0;
-  await act(async () => { publishSeries({ ...seriesSnapshot(), position: 2 }); });
-  await ui.renderOnce();
-  answer = "End here";
-  await ui.click("range-actions");
+  await ui.click(1);
   assert.deepEqual(requested, []);
-  answer = "Apply 1–3";
-  await ui.click("range-actions");
-  const selection = selectedRange(seriesSnapshot(), 0, 2);
-  assert.ok(selection);
-  assert.deepEqual(requested, [["diff", selection.revisionRange]]);
-  assert.equal(seriesSnapshot().range, null);
-  await act(async () => { publishRange(selection); });
-  await ui.renderOnce();
-  answer = "Clear range";
-  await ui.click("range-actions");
-  assert.deepEqual(requested[1], ["show", commits[2]!.sha]);
-  assert.deepEqual(draft, { start: null, end: null });
-});
-
-test("single clicks and scrolling keep rows accessible without drag range state", async () => {
-  const ui = await pane();
-  await ui.click("commit-log-row-1");
+  await ui.settle();
   assert.deepEqual(requested, [["show", commits[1]!.sha]]);
-  await act(async () => {
-    await ui.mockMouse.drag(15, 6, 33, 0);
-    for (let i = 0; i < 6; i += 1) await ui.mockMouse.scroll(25, 10, "down");
-  });
-  await ui.renderOnce();
-  assert.ok(requested.every((target) => target[0] === "show"));
-  const rows = commits.map((_, index) => ui.renderer.root.findDescendantById(`commit-log-row-${index}`));
-  const visible = rows.findIndex((row, index) => index > 10 && row && row.y >= 1 && row.y < 12);
-  assert.ok(visible > 10);
-  await ui.click(`commit-log-row-${visible}`);
-  assert.deepEqual(requested.at(-1), ["show", commits[visible]!.sha]);
 });
 
-test("right-click endpoints survive scrolling and cancelled menus without loading", async () => {
+test("Escape cancels armed range and pending single clicks", async () => {
   const ui = await pane();
-  answer = "Start here";
-  await ui.click("commit-log-row-0", MouseButtons.RIGHT);
-  await act(async () => {
-    for (let i = 0; i < 6; i += 1) await ui.mockMouse.scroll(25, 10, "down");
-  });
-  await ui.renderOnce();
-  const visible = commits.findIndex((_, index) => {
-    const row = ui.renderer.root.findDescendantById(`commit-log-row-${index}`);
-    return index > 10 && row !== null && row !== undefined && row.y >= 1 && row.y < 12;
-  });
-  assert.ok(visible > 10);
-  answer = "End here";
-  await ui.click(`commit-log-row-${visible}`, MouseButtons.RIGHT);
-  answer = null;
-  await ui.click("range-actions");
-  assert.deepEqual(draft, { start: commits[0]!.sha, end: commits[visible]!.sha });
+  await ui.click(2, true);
+  await act(async () => { ui.mockInput.pressEscape(); });
+  await ui.settle();
+  assert.doesNotMatch(ui.captureCharFrame(), /End · Esc/);
+  await ui.click(1);
+  await act(async () => { ui.mockInput.pressEscape(); });
+  await ui.settle();
   assert.deepEqual(requested, []);
 });
 
-test("minimum-width rows clip long subjects without wrapping or losing controls", async () => {
-  publishSeries({ ...seriesSnapshot(), commits: commits.map((commit) => ({ ...commit, subject: "Long subject ".repeat(8) })) });
-  const ui = await pane(session, 22);
-  assert.match(ui.captureCharFrame(), /Files.*⋯/);
-  assert.equal(ui.renderer.root.findDescendantById("commit-log-row-1")?.y, 2);
-  assert.equal(ui.renderer.root.findDescendantById("commit-log-row-0")?.width, 22);
+test("armed endpoint survives wheel scrolling; drag never applies a range", async () => {
+  const ui = await pane();
+  await ui.click(0, true);
+  await act(async () => {
+    await ui.mockMouse.drag(15, 4, 33, 0);
+    for (let i = 0; i < 6; i += 1) await ui.mockMouse.scroll(25, 10, "down");
+  });
+  await ui.renderOnce();
+  assert.deepEqual(requested, []);
+  const end = commits.findIndex((_, index) => {
+    const row = ui.renderer.root.findDescendantById(`commit-log-row-${index}`);
+    return index > 10 && row && row.y >= 1 && row.y < 12;
+  });
+  assert.ok(end > 10);
+  await ui.click(end);
+  await ui.settle();
+  assert.deepEqual(requested, [["diff", selectedRange(seriesSnapshot(), 0, end)!.revisionRange]]);
 });
 
-test("Clear during Apply queues the loaded commit, not a late range", async () => {
-  let finish: ((value: string) => void) | undefined;
-  const ui = await pane({
-    pid: session.pid,
-    run: async (args) => {
-      const result = await session.run(args);
-      if (args[4] === "diff") return new Promise<string>((resolve) => { finish = resolve; });
-      return result;
-    },
-  });
-  draft.start = commits[0]!.sha;
-  draft.end = commits[2]!.sha;
-  const range = selectedRange(seriesSnapshot(), 0, 2);
-  assert.ok(range);
-  answer = "Apply 1–3";
-  await ui.click("range-actions");
-  answer = "Clear range";
-  await ui.click("range-actions");
-  assert.deepEqual(requested, [["diff", range.revisionRange]]);
-  assert.ok(finish);
-  await act(async () => {
-    finish!("Reloaded");
-    await new Promise<void>((resolve) => { setImmediate(resolve); });
-  });
-  assert.deepEqual(requested, [["diff", range.revisionRange], ["show", commits[0]!.sha]]);
-  assert.equal(seriesSnapshot().range, null);
+test("failed range leaves loaded selection intact", async () => {
+  const ui = await pane({ ...session, run: async (args) => {
+    if (args[4] === "diff") return null;
+    return session.run(args);
+  } });
+  const loaded = seriesSnapshot();
+  await ui.click(0, true);
+  await ui.click(2);
+  await ui.settle();
+  assert.equal(seriesSnapshot(), loaded);
+  assert.ok(warnings.length > 0);
+});
+
+test("compact header keeps Files away from divider and changes its hover paint", async () => {
+  const ui = await pane(session, 22);
+  const button = ui.renderer.root.findDescendantById("show-files");
+  assert.ok(button);
+  assert.ok(button.x + button.width < 20);
+  assert.match(ui.captureCharFrame(), /\[Files\]/);
+  assert.doesNotMatch(ui.captureCharFrame(), /⋯|Start|not set/);
+  assert.equal(ui.renderer.root.findDescendantById("commit-log-row-10")?.y, 11);
+  const before = ui.captureSpans();
+  await act(async () => { await ui.mockMouse.moveTo(button.x + 2, button.y); });
+  await ui.renderOnce();
+  assert.notDeepEqual(ui.captureSpans(), before);
+  await act(async () => { await ui.mockMouse.click(button.x + 2, button.y); });
+  assert.equal(filesShown, 1);
 });

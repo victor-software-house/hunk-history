@@ -25,12 +25,9 @@ import {
   seriesSnapshot,
 } from "./store.ts";
 import { createElement } from "react";
-import { showRangeActions, type RangeDraft } from "./range-actions.ts";
 import { showSidebar } from "./sidebar.ts";
 
 export default function registerCommitLog(hunk: HunkExtensionAPI): void {
-  const draft: RangeDraft = { start: null, end: null };
-  hunk.events.on<string>("hunk-history:actions", (sha, ctx) => showRangeActions(sha, draft, ctx));
   hunk.events.on("hunk-history:files", (_event, ctx) => showSidebar(ctx.panes, "files"));
 
   const options: SeriesOptions = {
@@ -95,7 +92,6 @@ export default function registerCommitLog(hunk: HunkExtensionAPI): void {
     component: (props) => createElement(CommitLogPane, {
       ...props,
       onFiles: () => hunk.events.emit("hunk-history:files", null),
-      onActions: (sha: string) => hunk.events.emit("hunk-history:actions", sha),
     }),
   });
 
@@ -137,10 +133,8 @@ export default function registerCommitLog(hunk: HunkExtensionAPI): void {
     showSidebar(ctx.panes, ctx.panes.isOpen("commits") ? "files" : "commits");
   });
 
-  hunk.registerCommand({ id: "range", title: "Commit range actions" }, (ctx) => {
-    const snapshot = seriesSnapshot();
-    const commit = snapshot.position === null ? undefined : snapshot.commits[snapshot.position];
-    if (commit) return showRangeActions(commit.sha, draft, ctx);
+  hunk.registerCommand({ id: "scope", title: "Show commit review scope" }, (ctx) => {
+    ctx.notify(seriesSnapshot().scope ?? "Opened commit", "info");
   });
 
   let expanded = false;

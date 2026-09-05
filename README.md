@@ -14,18 +14,16 @@ Requires Hunk 0.19.0 or newer (extension API 6) and Git on PATH.
 - **Files / Commits:** press **h** to swap the two views in one sidebar area.
   The **Files** label in the commit header switches back to Hunk's file tree.
   This is an extension-only switch, not native tabs. Commits defaults to 34 columns.
-- **Range actions:** right-click a commit, click **⋯** for the active commit, or
-  use the **Commit range actions** command. Hunk owns the themed modal and Escape.
-- **Start here / End here** set draft endpoints without loading a diff. Their
-  hashes appear in the menu title, not in permanent fields above the list.
-- **Apply** appears when both endpoints exist. Either order works; equal
-  endpoints load one commit.
-- **Clear range** removes draft endpoints and returns an applied or pending
-  range to the active loaded commit.
+- **Double-click either endpoint** to start a range. The anchor is highlighted;
+  the header temporarily shows **End · Esc**. Nothing loads yet.
+- **Click the other endpoint** to immediately load the inclusive range. Oldest-first
+  and newest-first work identically. Clicking the same endpoint loads one commit.
+- **Esc** cancels. Switching to Files or replacing the review also cancels the draft.
+- Single-click navigation waits 300 ms to distinguish a double-click. Once a range
+  is loaded, a single click returns to a single-commit review.
 
-No dragging, Shift-click, or persistent selection mode is required. Applied
-ranges are labeled separately from draft endpoints. Failed loads retain the
-previously loaded selection and message rather than claiming the new range loaded.
+No dragging, Shift-click, ellipsis menu or separate Apply action is required.
+Failed loads retain the previously loaded selection and message.
 
 The commit header shows its position in the series, SHA and subject. The message
 pane shows the author, full timestamp with original UTC offset, and wrapped body.
@@ -56,7 +54,7 @@ The extension id and configuration namespace are `hunk-history`.
 
 ## Review scope
 
-The **Show scope** menu action identifies which commits the list represents. For a branch
+The **Show commit review scope** command identifies which commits the list represents. For a branch
 review, set a range explicitly in the repository's `.hunk/config.toml`:
 
 ```toml
@@ -94,7 +92,7 @@ Hunk after changing it.
 | `h` | `hunk-history.toggle` | Switch Files / Commits |
 | `i` | `hunk-history.message` | Toggle commit message |
 | `I` | `hunk-history.expand` | Fit/collapse message |
-| — | `hunk-history.range` | Commit range actions |
+| — | `hunk-history.scope` | Show commit review scope |
 
 Remap command ids in the user config's `[keybindings]` table. `[` and `]` already
 belong to Hunk's hunk navigation and are not claimed by this extension.
@@ -128,11 +126,10 @@ npm test
 Node runs pure unit tests. The rendered pointer tests use the existing OpenTUI
 in-memory renderer under Bun (tested with Bun 1.4.0); OpenTUI's current native FFI
 is not available under Node. No second package manager or new dependency is added.
-The pointer tests exercise the compact header, full-width rows, Files affordance,
-menu dispatch, Apply/Clear, single-commit clicks, release outside the list, and
-scrolling through the production request queue, with the Hunk CLI and modal-answer
-seams injected. Direct tests cover cancellation, stale answers, endpoint rules and
-pane swap ordering. They do not touch a live review window.
+The pointer tests exercise real double-clicks and releases in both endpoint orders,
+Escape, delayed single navigation, scrolling, drag rejection, failed loads and Files
+hover feedback. The production request queue uses only an injected Hunk CLI seam.
+Direct tests cover pane swap ordering. They do not touch a live review window.
 
 Hunk loads TypeScript directly; no production build is needed. React and OpenTUI
 remain development dependencies because Hunk supplies them to extensions.
