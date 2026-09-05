@@ -24,6 +24,7 @@ export function CommitLogPane({ actions, width, height, theme, session, onFiles 
   const scroll = useRef<ScrollBoxRenderable | null>(null);
   const [anchor, setAnchor] = useState<string | null>(null);
   const [filesHovered, setFilesHovered] = useState(false);
+  const [hoveredCommit, setHoveredCommit] = useState<string | null>(null);
   const pressed = useRef<string | null>(null);
   const click = useRef<{ sha: string; timer: ReturnType<typeof setTimeout> } | null>(null);
 
@@ -34,6 +35,7 @@ export function CommitLogPane({ actions, width, height, theme, session, onFiles 
 
   useEffect(() => {
     setAnchor(null);
+    setHoveredCommit(null);
     pressed.current = null;
     return cancelClick;
   }, [snapshot]);
@@ -110,7 +112,10 @@ export function CommitLogPane({ actions, width, height, theme, session, onFiles 
         {commits.map((commit, index) => (
           <text key={commit.sha} id={rowId(index)} wrapMode="none" selectable={false}
             style={{ height: 1, flexShrink: 0, width: "100%" }}
-            fg={theme.text} bg={anchor === commit.sha ? theme.accentMuted : isSelectedIndex(snapshot, index) ? theme.selectedHunk : theme.panel}
+            fg={theme.text}
+            bg={anchor === commit.sha ? theme.accentMuted : hoveredCommit === commit.sha ? theme.panelAlt : isSelectedIndex(snapshot, index) ? theme.selectedHunk : theme.panel}
+            onMouseOver={() => setHoveredCommit(commit.sha)}
+            onMouseOut={() => setHoveredCommit(null)}
             onMouseDown={(event: TuiMouseEvent) => {
               if (event.button !== MouseButton.LEFT) return;
               event.stopPropagation();

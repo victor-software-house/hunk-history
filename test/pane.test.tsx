@@ -187,3 +187,23 @@ test("compact header keeps Files away from divider and changes its hover paint",
   await act(async () => { await ui.mockMouse.click(button.x + 2, button.y); });
   assert.equal(filesShown, 1);
 });
+
+test("commit hover paints immediately without navigating and preserves the range anchor", async () => {
+  const ui = await pane();
+  const row = ui.renderer.root.findDescendantById("commit-log-row-1");
+  assert.ok(row);
+  const resting = ui.captureSpans().lines[row.y];
+  await act(async () => { await ui.mockMouse.moveTo(row.x + 2, row.y); });
+  await ui.renderOnce();
+  assert.notDeepEqual(ui.captureSpans().lines[row.y], resting);
+  assert.deepEqual(requested, []);
+  await act(async () => { await ui.mockMouse.moveTo(25, 0); });
+  await ui.renderOnce();
+  assert.deepEqual(ui.captureSpans().lines[row.y], resting);
+  await ui.click(1, true);
+  const anchored = ui.captureSpans().lines[row.y];
+  await act(async () => { await ui.mockMouse.moveTo(25, 0); });
+  await ui.renderOnce();
+  assert.deepEqual(ui.captureSpans().lines[row.y], anchored);
+  assert.deepEqual(requested, []);
+});
