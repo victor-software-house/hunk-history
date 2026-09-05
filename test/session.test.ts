@@ -5,12 +5,14 @@ import {
   loadCommit,
   loadRange,
   pendingCommit,
+  pendingRange,
   requestCommit,
   requestRange,
   resetPending,
   resetSessionId,
   type CommandRunner,
 } from "../session.ts";
+import { EMPTY_SERIES, publishSeries, selectedRange, seriesSnapshot } from "../store.ts";
 
 const OWN_PID = 4242;
 const SESSION_ID = "c47344a1-66d4-43b7-a898-b3058e129354";
@@ -48,6 +50,7 @@ function daemon(options: { sessions?: string; reload?: string | null } = {}): Fa
 beforeEach(() => {
   resetSessionId();
   resetPending();
+  publishSeries(EMPTY_SERIES);
 });
 
 /** A daemon whose reloads finish only when the test says so. */
@@ -201,28 +204,39 @@ test("a burst of steps loads where the reviewer stopped, not every stop", async 
 test("a range request coalesces behind an in-flight commit request", async () => {
   const cli = deferredCli();
   const deps = { run: cli.run, pid: OWN_PID };
-  const range = `${"1".repeat(40)}..${"3".repeat(40)}`;
-  const started: string[] = [];
-
+  const selection = { anchor: 0, endpoint: 2, start: 0, end: 2, revisionRange: `${"1".repeat(40)}..${"3".repeat(40)}` };
   requestCommit("a".repeat(40), () => {}, deps);
   await settle();
-  requestRange(range, () => {}, () => started.push(range), deps);
-  assert.deepEqual(started, [], "queued selection stays hidden until its reload starts");
-
+  requestRange(selection, () => {}, deps);
+  assert.equal(pendingRange(), null);
   cli.finish();
   await settle();
-  await settle();
-  assert.deepEqual(started, [range]);
+  assert.deepEqual(pendingRange(), selection);
+  assert.equal(seriesSnapshot(), EMPTY_SERIES, "pending selection is not loaded state");
   cli.finish();
   await settle();
+  assert.equal(pendingRange(), null);
+  assert.deepEqual(cli.calls.filter((call) => call[1] === "reload").map((call) => call.slice(4)), [
+    ["show", "a".repeat(40)], ["diff", selection.revisionRange],
+  ]);
+});
 
-  assert.deepEqual(
-    cli.calls.filter((call) => call[1] === "reload").map((call) => call.slice(4)),
-    [
-      ["show", "a".repeat(40)],
-      ["diff", range],
-    ],
-  );
+test("a refused range preserves loaded state and refreshes discovery on the next action", async () => {
+  const cli = daemon({ reload: null });
+  const deps = { run: cli.run, pid: OWN_PID };
+  const commits = [1, 2].map((n) => ({ sha: String(n).repeat(40), abbrev: String(n).repeat(7), subject: `commit ${n}`, baseSha: String(n - 1).repeat(40) }));
+  publishSeries({ commits, position: 0, range: null, message: { author: "Ada", timestamp: "date", body: "retained" } });
+  const before = seriesSnapshot();
+  const range = selectedRange(before, 0, 1);
+  assert.ok(range);
+  const warnings: string[] = [];
+  requestRange(range, (message) => warnings.push(message), deps);
+  await settle();
+  assert.equal(seriesSnapshot(), before);
+  assert.equal(pendingRange(), null);
+  assert.match(warnings.join("\n"), /cannot load the selected range/);
+  await loadCommit(SHA, deps);
+  assert.equal(cli.calls.filter((call) => call[1] === "list").length, 2);
 });
 
 test("asking again for the commit already loading costs nothing", async () => {

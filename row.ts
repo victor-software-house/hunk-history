@@ -39,7 +39,6 @@ export function seriesHeading(
   total: number,
   width: number,
   range?: { start: number; end: number } | null,
-  dragging = false,
 ): string {
   const place =
     range !== null && range !== undefined
@@ -47,9 +46,8 @@ export function seriesHeading(
       : position === null
         ? `${total}`
         : `${position + 1}/${total}`;
-  const label = dragging ? "Selecting" : range ? "Selected" : "Commits";
-  const hint = !dragging && !range ? "  drag to select" : "";
-  return clip(` ${label} ${place}${hint}`, width);
+  const label = range ? "Applied" : "Commits";
+  return clip(` ${label} ${place}`, width);
 }
 
 /**

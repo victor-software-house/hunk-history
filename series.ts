@@ -5,6 +5,7 @@ import type { CommitMessage, SeriesCommit, SeriesSnapshot } from "./store.ts";
 /** The reviewed commit, and the series it belongs to. */
 export interface ReviewSeries {
   repoName: string;
+  scope?: string;
   commits: SeriesCommit[];
   /** Index of the reviewed commit in `commits`. */
   position: number;
@@ -27,16 +28,6 @@ export const DEFAULT_MESSAGE_ROWS = 8;
 const MIN_MESSAGE_ROWS = 3;
 const MAX_MESSAGE_ROWS = 60;
 const GIT_TIMEOUT_MS = 2_000;
-/**
- * The series a reviewer means when they configure nothing.
- *
- * `@{upstream}` is the tracking branch of the checked-out branch, so this is
- * the work added since the last push. The right end is `HEAD` and not the
- * reviewed commit: stepping back into that work has to keep the commits above
- * it, or `n` would have nowhere left to go.
- */
-const UNPUSHED_RANGE = "@{upstream}..HEAD";
-
 /**
  * Run git in one working directory.
  *
@@ -165,46 +156,29 @@ export function configuredLimit(config: unknown): number {
   return Math.min(Math.max(Math.trunc(value), 1), MAX_LIMIT);
 }
 
-/**
- * The series the reviewed commit belongs to, oldest first.
- *
- * A configured range is honoured, or abandoned when it does not contain the
- * reviewed commit: that is the reviewer looking outside the branch they
- * configured, not an error. With nothing configured the series is the commits
- * not yet pushed. Either way, a series that does not hold what is on screen
- * gives way to the `limit` commits leading up to it.
- */
+/** A configured scope never silently broadens into unrelated recent history. */
 function buildSeries(
   git: GitRunner,
   head: SeriesCommit,
   options: SeriesOptions,
   log: (message: string) => void,
-): SeriesCommit[] {
+): { commits: SeriesCommit[]; scope: string } {
   if (options.range !== null) {
-    const configured = readCommits(git, git(["rev-list", "--reverse", options.range, "--"]) ?? "");
+    const shas = git(["rev-list", "--reverse", options.range, "--"]);
+    const configured = readCommits(git, shas ?? "");
     if (configured.some((commit) => commit.sha === head.sha)) {
-      return configured;
+      return { commits: configured, scope: options.range };
     }
-    log(
-      `range "${options.range}" does not contain ${head.abbrev}; ` +
-        `using the ${options.limit} commits before it`,
-    );
-  } else {
-    // Silent when it finds nothing: git exits non-zero on a detached HEAD or a
-    // branch with no upstream, which reads here as the empty list a branch in
-    // sync returns, and neither is a reviewer's wish going unmet.
-    const unpushed = readCommits(
-      git,
-      git(["rev-list", "--reverse", "-n", String(options.limit), UNPUSHED_RANGE, "--"]) ?? "",
-    );
-    if (unpushed.some((commit) => commit.sha === head.sha)) {
-      return unpushed;
-    }
+    log(`Cannot use range "${options.range}" for ${head.abbrev}; showing only the opened commit`);
+    return { commits: [head], scope: `opened ${head.abbrev} (scope unavailable)` };
   }
 
   const recent = git(["rev-list", "-n", String(options.limit), head.sha, "--"]);
   const commits = readCommits(git, (recent ?? "").split("\n").reverse().join("\n"));
-  return commits.length === 0 ? [head] : commits;
+  return {
+    commits: commits.length === 0 ? [head] : commits,
+    scope: `recent ${options.limit} through ${head.abbrev}`,
+  };
 }
 
 /**
@@ -221,6 +195,7 @@ export function resolveSeries(
   options: SeriesOptions,
   log: (message: string) => void,
   anchor: readonly SeriesCommit[] = [],
+  anchorScope?: string,
 ): ReviewSeries | null {
   const repoRoot = git(["rev-parse", "--show-toplevel"]);
   if (repoRoot === null) {
@@ -246,14 +221,14 @@ export function resolveSeries(
   // reviewed commit would change under the reviewer.
   const held = anchor.findIndex((commit) => commit.sha === head.sha);
   if (held >= 0) {
-    return { repoName, commits: [...anchor], position: held };
+    return { repoName, commits: [...anchor], position: held, scope: anchorScope };
   }
 
-  const commits = buildSeries(git, head, options, log);
+  const { commits, scope } = buildSeries(git, head, options, log);
   const found = commits.findIndex((commit) => commit.sha === head.sha);
   return found < 0
-    ? { repoName, commits: [head], position: 0 }
-    : { repoName, commits, position: found };
+    ? { repoName, commits: [head], position: 0, scope }
+    : { repoName, commits, position: found, scope };
 }
 
 /** The review header line: where in the series this commit is, and what it does. */

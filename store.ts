@@ -35,6 +35,7 @@ export interface SeriesRange {
 /** What the panes paint: the series, active endpoint, optional range, and message. */
 export interface SeriesSnapshot {
   readonly commits: readonly SeriesCommit[];
+  readonly scope?: string;
   /** Index into `commits`, or null when the review is not a commit-backed review. */
   readonly position: number | null;
   readonly range: SeriesRange | null;
@@ -146,7 +147,7 @@ export function neighbour(
   return snapshot.commits[base + delta] ?? null;
 }
 
-/** Build one inclusive range directly from a drag's start and end rows. */
+/** Build one inclusive range from explicitly chosen endpoint rows. */
 export function selectedRange(
   snapshot: SeriesSnapshot,
   anchor: number,
@@ -187,7 +188,7 @@ export function isSelectedIndex(snapshot: SeriesSnapshot, index: number): boolea
     : index >= snapshot.range.start && index <= snapshot.range.end;
 }
 
-/** Publish a range before asking Hunk to replace the review with its net diff. */
+/** Publish a range after its matching diff is loaded. */
 export function publishRange(range: SeriesRange): void {
   publishSeries({
     ...snapshot,
@@ -227,6 +228,7 @@ function sameRange(left: SeriesRange | null, right: SeriesRange | null): boolean
 function sameSeries(left: SeriesSnapshot, right: SeriesSnapshot): boolean {
   return (
     left.position === right.position &&
+    left.scope === right.scope &&
     sameRange(left.range, right.range) &&
     sameMessage(left.message, right.message) &&
     left.commits.length === right.commits.length &&

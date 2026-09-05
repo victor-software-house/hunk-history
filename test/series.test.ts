@@ -106,15 +106,7 @@ function fakeRepo(options: { ranges?: Record<string, string[]>; repoRoot?: strin
     }
 
     if (args[0] === "rev-list" && args[1] === "--reverse") {
-      // Two shapes reach here: a configured range asks for all of it, the
-      // unpushed default asks for the newest `limit`, which git counts from
-      // the newest end before reversing.
-      const limited = args[2] === "-n";
-      const range = options.ranges?.[(limited ? args[4] : args[2]) ?? ""];
-      if (range === undefined) {
-        return null;
-      }
-      return (limited ? range.slice(-Number(args[3])) : range).join("\n");
+      return options.ranges?.[args[2] ?? ""]?.join("\n") ?? null;
     }
 
     if (args[0] === "rev-list" && args[1] === "-n") {
@@ -179,65 +171,31 @@ test("the series ends at the reviewed commit, oldest first", () => {
   assert.equal(review?.repoName, REPO_NAME);
 });
 
-test("the commits not yet pushed are the series when nothing is configured", () => {
-  const { git } = fakeRepo({ ranges: { [UNPUSHED]: HISTORY.slice(2).map((commit) => commit.sha) } });
-
-  const review = resolveSeries(`${REPO_NAME} show ${HISTORY[3]!.abbrev}`, git, DEFAULTS, silent());
-
-  assert.deepEqual(review?.commits.map((commit) => commit.abbrev), ["3333333", "4444444", "5555555"]);
-  assert.equal(review?.position, 1, "the commits above the reviewed one are what `n` steps through");
-});
-
-test("the unpushed series is bounded by the limit", () => {
-  const { git, calls } = fakeRepo({ ranges: { [UNPUSHED]: HISTORY.map((commit) => commit.sha) } });
-
+test("the recent-history limit bounds the visible series", () => {
+  const { git } = fakeRepo();
   const review = resolveSeries(`${REPO_NAME} show HEAD`, git, { range: null, limit: 2 }, silent());
-
   assert.deepEqual(review?.commits.map((commit) => commit.abbrev), ["4444444", "5555555"]);
-  assert.ok(
-    !calls.some((call) => call[0] === "rev-list" && call[1] === "-n"),
-    "the unpushed range answered, so no walk back through history followed",
-  );
+  assert.equal(review?.scope, "recent 2 through 5555555");
 });
 
-test("a branch with no upstream falls back to recent history", () => {
-  const { git, calls } = fakeRepo();
-
-  const review = resolveSeries(`${REPO_NAME} show HEAD`, git, { range: null, limit: 2 }, silent());
-
-  assert.ok(calls.some((call) => call.includes(UNPUSHED)), "the upstream is asked for first");
-  assert.deepEqual(review?.commits.map((commit) => commit.abbrev), ["4444444", "5555555"]);
+test("push state does not change an unconfigured review series", () => {
+  const before = fakeRepo({ ranges: { [UNPUSHED]: HISTORY.slice(2).map((commit) => commit.sha) } });
+  const after = fakeRepo({ ranges: { [UNPUSHED]: [] } });
+  const title = `${REPO_NAME} show ${HISTORY[3]!.abbrev}`;
+  const first = resolveSeries(title, before.git, DEFAULTS, silent());
+  const second = resolveSeries(title, after.git, DEFAULTS, silent());
+  assert.deepEqual(first, second);
+  assert.deepEqual(first?.commits.map((commit) => commit.abbrev), ["1111111", "2222222", "3333333", "4444444"]);
+  assert.equal(first?.scope, "recent 20 through 4444444");
+  assert.ok(!before.calls.concat(after.calls).some((call) => call.includes(UNPUSHED)));
 });
 
-test("a reviewed commit that is already pushed falls back without complaining", () => {
-  const { git } = fakeRepo({ ranges: { [UNPUSHED]: HISTORY.slice(3).map((commit) => commit.sha) } });
-  const logs: string[] = [];
-
-  const review = resolveSeries(`${REPO_NAME} show ${HISTORY[1]!.abbrev}`, git, DEFAULTS, (m) =>
-    logs.push(m),
-  );
-
-  assert.deepEqual(review?.commits.map((commit) => commit.abbrev), ["1111111", "2222222"]);
-  assert.deepEqual(logs, [], "nothing was configured, so nothing went unhonoured");
-});
-
-test("a configured range wins over the unpushed commits", () => {
+test("a configured range wins over recent history", () => {
   const range = "main..topic";
-  const { git } = fakeRepo({
-    ranges: {
-      [range]: HISTORY.slice(1, 4).map((commit) => commit.sha),
-      [UNPUSHED]: [HISTORY[4]!.sha],
-    },
-  });
-
-  const review = resolveSeries(
-    `${REPO_NAME} show ${HISTORY[2]!.abbrev}`,
-    git,
-    { range, limit: 20 },
-    silent(),
-  );
-
+  const { git } = fakeRepo({ ranges: { [range]: HISTORY.slice(1, 4).map((commit) => commit.sha) } });
+  const review = resolveSeries(`${REPO_NAME} show ${HISTORY[2]!.abbrev}`, git, { range, limit: 20 }, silent());
   assert.deepEqual(review?.commits.map((commit) => commit.abbrev), ["2222222", "3333333", "4444444"]);
+  assert.equal(review?.scope, range);
 });
 
 test("a configured range that contains the commit is the series", () => {
@@ -250,30 +208,24 @@ test("a configured range that contains the commit is the series", () => {
   assert.equal(review?.position, 1);
 });
 
-test("a configured range without the commit falls back and says so", () => {
+test("a configured range without the commit never broadens into history", () => {
   const range = "main..topic";
-  const { git } = fakeRepo({ ranges: { [range]: [HISTORY[4]!.sha] } });
+  const { git, calls } = fakeRepo({ ranges: { [range]: [HISTORY[4]!.sha] } });
   const logs: string[] = [];
-
-  const review = resolveSeries(
-    `${REPO_NAME} show ${HISTORY[1]!.abbrev}`,
-    git,
-    { range, limit: 20 },
-    (m) => logs.push(m),
-  );
-
-  assert.deepEqual(review?.commits.map((commit) => commit.abbrev), ["1111111", "2222222"]);
-  assert.equal(review?.position, 1);
-  assert.match(logs.join("\n"), /range "main\.\.topic" does not contain 2222222/);
+  const review = resolveSeries(`${REPO_NAME} show ${HISTORY[1]!.abbrev}`, git, { range, limit: 20 }, (m) => logs.push(m));
+  assert.deepEqual(review?.commits.map((commit) => commit.abbrev), ["2222222"]);
+  assert.equal(review?.position, 0);
+  assert.match(review?.scope ?? "", /scope unavailable/);
+  assert.match(logs.join("\n"), /Cannot use range "main\.\.topic"/);
+  assert.ok(!calls.some((call) => call[0] === "rev-list" && call[1] === "-n"));
 });
 
-test("the limit bounds how much history one review gathers", () => {
-  const { git, calls } = fakeRepo();
-
-  const review = resolveSeries(`${REPO_NAME} show HEAD`, git, { range: null, limit: 2 }, silent());
-
-  assert.deepEqual(review?.commits.map((commit) => commit.abbrev), ["4444444", "5555555"]);
-  assert.ok(calls.some((call) => call[0] === "rev-list" && call[2] === "2"));
+test("an invalid configured revision reports failure without a history fallback", () => {
+  const { git } = fakeRepo();
+  const logs: string[] = [];
+  const review = resolveSeries(`${REPO_NAME} show HEAD`, git, { range: "missing..HEAD", limit: 20 }, (message) => logs.push(message));
+  assert.deepEqual(review?.commits, [HISTORY[4]]);
+  assert.match(logs.join("\n"), /showing only the opened commit/);
 });
 
 test("a configured range never reaches git as an option", () => {

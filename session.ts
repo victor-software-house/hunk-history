@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import type { SeriesRange } from "./store.ts";
 
 /** One command run against the Hunk CLI: trimmed stdout, or null on failure. */
 export type CommandRunner = (args: readonly string[]) => Promise<string | null>;
@@ -84,7 +85,7 @@ export function resetSessionId(): void {
 /** One review the extension can ask the live Hunk window to load. */
 type ReviewTarget =
   | { kind: "commit"; value: string }
-  | { kind: "range"; value: string; onStart: () => void };
+  | { kind: "range"; value: string; selection: SeriesRange | null };
 
 /** Replace this window's review with one target. */
 async function loadReview(target: ReviewTarget, deps: SessionDeps): Promise<string | null> {
@@ -95,6 +96,7 @@ async function loadReview(target: ReviewTarget, deps: SessionDeps): Promise<stri
 
   const command = target.kind === "commit" ? "show" : "diff";
   const result = await deps.run(["session", "reload", id, "--", command, target.value]);
+  if (result === null) cachedSessionId = null;
   const label = target.kind === "commit" ? target.value.slice(0, 8) : "the selected range";
   return result === null ? `cannot load ${label}` : null;
 }
@@ -106,11 +108,16 @@ export function loadCommit(sha: string, deps: SessionDeps): Promise<string | nul
 
 /** Replace this window's review with one concrete tree range. */
 export function loadRange(range: string, deps: SessionDeps): Promise<string | null> {
-  return loadReview({ kind: "range", value: range, onStart: () => {} }, deps);
+  return loadReview({ kind: "range", value: range, selection: null }, deps);
 }
 
 let inFlight: ReviewTarget | null = null;
 let queued: ReviewTarget | null = null;
+
+/** Only the matching changeset transform may commit this selection to the pane. */
+export function pendingRange(): SeriesRange | null {
+  return inFlight?.kind === "range" ? inFlight.selection : null;
+}
 
 /** Report whether two requests name the same review. */
 function sameTarget(left: ReviewTarget, right: ReviewTarget): boolean {
@@ -155,12 +162,11 @@ export function requestCommit(
 
 /** Ask this window to show one concrete inclusive range. */
 export function requestRange(
-  range: string,
+  selection: SeriesRange,
   report: (message: string, type?: "info" | "warning" | "error") => void,
-  onStart: () => void = () => {},
   deps: SessionDeps = { run: hunkRunner(), pid: process.pid },
 ): void {
-  requestReview({ kind: "range", value: range, onStart }, report, deps);
+  requestReview({ kind: "range", value: selection.revisionRange, selection }, report, deps);
 }
 
 /** Serialize reloads and coalesce bursts to the last review the user requested. */
@@ -174,7 +180,6 @@ function requestReview(
     return;
   }
 
-  target.kind === "range" && target.onStart();
   inFlight = target;
   void loadReview(target, deps).then((problem) => {
     inFlight = null;

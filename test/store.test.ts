@@ -130,7 +130,7 @@ test("stepping counts from the commit already being loaded", () => {
   assert.equal(neighbour(snapshot, -1, SERIES[0]!.sha), null, "the edge holds while loading too");
 });
 
-test("selection spans inclusively between direct drag endpoints", () => {
+test("selection spans inclusively between explicit endpoints", () => {
   const snapshot = { commits: SERIES, position: 2, range: null, message: null } as const;
   const range = selectedRange(snapshot, 2, 0);
 
@@ -143,7 +143,7 @@ test("selection spans inclusively between direct drag endpoints", () => {
   });
 });
 
-test("every drag chooses a fresh pivot", () => {
+test("each endpoint selection is independent of the previous one", () => {
   const snapshot = { commits: SERIES, position: 1, range: null, message: null } as const;
 
   assert.equal(selectedRange(snapshot, 1, 2)?.anchor, 1);

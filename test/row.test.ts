@@ -47,14 +47,10 @@ test("a commit row never exceeds the pane width", () => {
   }
 });
 
-test("the heading teaches direct selection and identifies its state", () => {
-  assert.equal(seriesHeading(2, 8, 40), " Commits 3/8  drag to select");
-  assert.equal(seriesHeading(4, 8, 40, { start: 1, end: 4 }), " Selected 2–5/8");
-  assert.equal(
-    seriesHeading(4, 8, 40, { start: 1, end: 4 }, true),
-    " Selecting 2–5/8",
-  );
-  assert.equal(seriesHeading(null, 8, 40), " Commits 8  drag to select");
+test("the heading distinguishes a loaded commit from an applied range", () => {
+  assert.equal(seriesHeading(2, 8, 40), " Commits 3/8");
+  assert.equal(seriesHeading(4, 8, 40, { start: 1, end: 4 }), " Applied 2–5/8");
+  assert.equal(seriesHeading(null, 8, 40), " Commits 8");
   assert.ok(seriesHeading(2, 8, 6).length <= 6);
 });
 

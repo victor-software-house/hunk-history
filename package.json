@@ -18,6 +18,6 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "node --test"
+    "test": "node --test test/*.test.ts && bun test ./test/pane.test.tsx"
   }
 }

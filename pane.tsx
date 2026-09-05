@@ -6,84 +6,57 @@ import {
 } from "@opentui/core";
 import type { ExtensionPaneProps } from "hunkdiff/extension";
 import { messageRows, type Tone } from "./highlight.ts";
-import { commitRow, seriesHeading } from "./row.ts";
-import { requestCommit, requestRange } from "./session.ts";
-import {
-  isSelectedIndex,
-  publishRange,
-  selectedRange,
-  seriesSnapshot,
-  subscribeSeries,
-} from "./store.ts";
+import { clip, commitRow, seriesHeading } from "./row.ts";
+import { pendingRange, requestCommit, requestRange, type SessionDeps } from "./session.ts";
+import { isSelectedIndex, selectedRange, seriesSnapshot, subscribeSeries } from "./store.ts";
 
-/** Row ids are what `scrollChildIntoView` and drag hit-testing address. */
 function rowId(index: number): string {
   return `commit-log-row-${index}`;
 }
 
-/** Resolve the commit row currently under a mouse event. */
-function eventRowIndex(event: TuiMouseEvent, fallback: number): number {
-  const match = /^commit-log-row-(\d+)$/.exec(event.target?.id ?? "");
-  return match === null ? fallback : Number(match[1]);
-}
-
-interface DragSelection {
-  anchor: number;
-  endpoint: number;
-}
-
-/**
- * The commit series behind the review, oldest at the top.
- *
- * Deliberately not newest-first the way a history list usually reads: the
- * position in the review header counts from the oldest commit, and so will the
- * stepping keys, so the rows count the same way. Reading down the pane is
- * reading the branch forwards.
- */
-export function CommitLogPane({ actions, width, height, theme }: ExtensionPaneProps): ReactNode {
+/** Single-commit navigation stays separate from an explicitly applied range. */
+export function CommitLogPane({
+  actions,
+  width,
+  height,
+  theme,
+  session,
+}: ExtensionPaneProps & { session?: SessionDeps }): ReactNode {
   const snapshot = useSyncExternalStore(subscribeSeries, seriesSnapshot);
   const { commits, position, range } = snapshot;
   const scroll = useRef<ScrollBoxRenderable | null>(null);
-  const dragRef = useRef<DragSelection | null>(null);
-  const [drag, setDrag] = useState<DragSelection | null>(null);
+  const [startSha, setStartSha] = useState<string | null>(null);
+  const [endSha, setEndSha] = useState<string | null>(null);
+  const start = commits.findIndex((commit) => commit.sha === startSha);
+  const end = commits.findIndex((commit) => commit.sha === endSha);
 
-  /** Keep event-time drag state available before React's next render. */
-  const updateDrag = (next: DragSelection | null) => {
-    dragRef.current = next;
-    setDrag(next);
-  };
-
-  /** Complete one click or drag without leaving a persistent selection mode. */
-  const finishSelection = (event: TuiMouseEvent, fallback: number) => {
-    const current = dragRef.current;
-    if (current === null || event.button !== MouseButton.LEFT) {
+  const apply = () => {
+    if (start < 0 || end < 0) {
+      actions.notify("Choose Start and End commits before applying a range", "info");
       return;
     }
-
-    event.stopPropagation();
-    const endpoint = eventRowIndex(event, fallback);
-    updateDrag(null);
-    const nextRange = selectedRange(snapshot, current.anchor, endpoint);
-    if (nextRange !== null) {
-      requestRange(nextRange.revisionRange, actions.notify, () => publishRange(nextRange));
+    if (start === end) {
+      requestCommit(commits[start]!.sha, actions.notify, session);
       return;
     }
-
-    const commit = commits[endpoint];
-    if (commit && (range !== null || endpoint !== position)) {
-      requestCommit(commit.sha, actions.notify);
+    const selection = selectedRange(snapshot, start, end);
+    if (selection === null) {
+      actions.notify("Cannot resolve the selected commit range", "warning");
+      return;
     }
+    requestRange(selection, actions.notify, session);
   };
 
-  const previewRange =
-    drag === null
-      ? range
-      : { start: Math.min(drag.anchor, drag.endpoint), end: Math.max(drag.anchor, drag.endpoint) };
+  const clear = () => {
+    setStartSha(null);
+    setEndSha(null);
+    const commit = position === null ? undefined : commits[position];
+    if ((range !== null || pendingRange() !== null) && commit)
+      requestCommit(commit.sha, actions.notify, session);
+  };
 
   useEffect(() => {
-    if (position !== null) {
-      scroll.current?.scrollChildIntoView(rowId(position));
-    }
+    if (position !== null) scroll.current?.scrollChildIntoView(rowId(position));
   }, [position, commits]);
 
   return (
@@ -96,9 +69,52 @@ export function CommitLogPane({ actions, width, height, theme }: ExtensionPanePr
         flexDirection: "column",
       }}
     >
-      <text fg={theme.accent} bg={theme.panel}>
-        {seriesHeading(position, commits.length, width, previewRange, drag !== null)}
+      <text
+        style={{ height: 1, flexShrink: 0 }}
+        selectable={false}
+        fg={theme.accent}
+        bg={theme.panel}
+      >
+        {seriesHeading(position, commits.length, width, range)}
       </text>
+      <text style={{ height: 1, flexShrink: 0 }} selectable={false} fg={theme.muted}>
+        {clip(` Scope: ${snapshot.scope ?? "opened commit"}`, width)}
+      </text>
+      <text
+        style={{ height: 1, flexShrink: 0 }}
+        selectable={false}
+      >{` Start: ${commits[start]?.abbrev ?? "not set"}`}</text>
+      <text
+        style={{ height: 1, flexShrink: 0 }}
+        selectable={false}
+      >{` End:   ${commits[end]?.abbrev ?? "not set"}`}</text>
+      <box style={{ flexDirection: "row", height: 1, flexShrink: 0 }}>
+        <text
+          id="range-apply"
+          selectable={false}
+          fg={theme.accent}
+          onMouseDown={(event: TuiMouseEvent) => {
+            if (event.button !== MouseButton.LEFT) return;
+            event.stopPropagation();
+            apply();
+          }}
+        >
+          {" "}
+          [Apply]{" "}
+        </text>
+        <text
+          id="range-clear"
+          selectable={false}
+          onMouseDown={(event: TuiMouseEvent) => {
+            if (event.button !== MouseButton.LEFT) return;
+            event.stopPropagation();
+            clear();
+          }}
+        >
+          {" "}
+          [Clear]{" "}
+        </text>
+      </box>
       <scrollbox
         ref={scroll}
         focused={false}
@@ -111,42 +127,55 @@ export function CommitLogPane({ actions, width, height, theme }: ExtensionPanePr
         verticalScrollbarOptions={{ visible: false }}
         horizontalScrollbarOptions={{ visible: false }}
       >
-        {commits.map((commit, index) => {
-          const selected =
-            drag === null
-              ? isSelectedIndex(snapshot, index)
-              : index >= Math.min(drag.anchor, drag.endpoint) &&
-                index <= Math.max(drag.anchor, drag.endpoint);
-          const active = drag === null ? index === position : index === drag.endpoint;
-          const rangeVisible = drag !== null || range !== null;
-          return (
+        {commits.map((commit, index) => (
+          <box
+            key={commit.sha}
+            id={rowId(index)}
+            style={{ flexDirection: "row", height: 1, flexShrink: 0 }}
+          >
             <text
-              key={commit.sha}
-              id={rowId(index)}
-              fg={selected ? theme.text : theme.muted}
-              bg={selected ? (rangeVisible ? theme.accentMuted : theme.selectedHunk) : theme.panel}
+              id={`range-start-${index}`}
+              selectable={false}
+              fg={start === index ? theme.accent : theme.muted}
               onMouseDown={(event: TuiMouseEvent) => {
-                if (event.button !== MouseButton.LEFT) {
-                  return;
-                }
+                if (event.button !== MouseButton.LEFT) return;
                 event.stopPropagation();
-                updateDrag({ anchor: index, endpoint: index });
+                setStartSha(commit.sha);
               }}
-              onMouseDrag={(event: TuiMouseEvent) => {
-                const current = dragRef.current;
-                if (current === null) {
-                  return;
-                }
-                event.stopPropagation();
-                updateDrag({ ...current, endpoint: eventRowIndex(event, index) });
-              }}
-              onMouseDragEnd={(event: TuiMouseEvent) => finishSelection(event, index)}
-              onMouseUp={(event: TuiMouseEvent) => finishSelection(event, index)}
             >
-              {commitRow(commit, width, { active, selected })}
+              [Start]
             </text>
-          );
-        })}
+            <text
+              id={`range-end-${index}`}
+              selectable={false}
+              fg={end === index ? theme.accent : theme.muted}
+              onMouseDown={(event: TuiMouseEvent) => {
+                if (event.button !== MouseButton.LEFT) return;
+                event.stopPropagation();
+                setEndSha(commit.sha);
+              }}
+            >
+              [End]
+            </text>
+            <text
+              id={`commit-open-${index}`}
+              selectable={false}
+              fg={isSelectedIndex(snapshot, index) ? theme.text : theme.muted}
+              bg={isSelectedIndex(snapshot, index) ? theme.selectedHunk : theme.panel}
+              onMouseDown={(event: TuiMouseEvent) => {
+                if (event.button !== MouseButton.LEFT) return;
+                event.stopPropagation();
+                if (range !== null || position !== index)
+                  requestCommit(commit.sha, actions.notify, session);
+              }}
+            >
+              {commitRow(commit, Math.max(0, width - 12), {
+                active: index === position,
+                selected: isSelectedIndex(snapshot, index),
+              })}
+            </text>
+          </box>
+        ))}
       </scrollbox>
     </box>
   );

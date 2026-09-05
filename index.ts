@@ -12,7 +12,7 @@ import {
   seriesTitle,
   type SeriesOptions,
 } from "./series.ts";
-import { pendingCommit, requestCommit } from "./session.ts";
+import { pendingCommit, pendingRange, requestCommit } from "./session.ts";
 import {
   COLLAPSED_MESSAGE_PANE,
   EMPTY_SERIES,
@@ -20,6 +20,7 @@ import {
   expandedPane,
   messagePanes,
   neighbour,
+  publishRange,
   publishSeries,
   seriesSnapshot,
 } from "./store.ts";
@@ -36,17 +37,23 @@ export default function registerCommitLog(hunk: HunkExtensionAPI): void {
     try {
       const git = gitRunner(ctx.cwd);
       const snapshot = seriesSnapshot();
-      const rangeReview = resolveRangeReview(changeset.title, git, snapshot);
+      const requested = pendingRange();
+      const candidate = requested === null ? snapshot : {
+        ...snapshot, range: requested, position: requested.endpoint, message: null,
+      };
+      const rangeReview = resolveRangeReview(changeset.title, git, candidate);
       if (rangeReview !== null) {
-        return { ...changeset, title: rangeTitle(rangeReview.repoName, snapshot) };
+        if (requested !== null) publishRange(requested);
+        return { ...changeset, title: rangeTitle(rangeReview.repoName, candidate) };
       }
 
       const review = resolveSeries(
         changeset.title,
         git,
         options,
-        (message) => hunk.log(message),
+        (message) => ctx.notify(message, "warning"),
         snapshot.commits,
+        snapshot.scope,
       );
       if (review === null) {
         publishSeries(EMPTY_SERIES);
@@ -56,6 +63,7 @@ export default function registerCommitLog(hunk: HunkExtensionAPI): void {
       const head = review.commits[review.position];
       publishSeries({
         commits: review.commits,
+        scope: review.scope,
         position: review.position,
         range: null,
         message: head === undefined ? null : readMessage(git, head.sha),
@@ -72,7 +80,7 @@ export default function registerCommitLog(hunk: HunkExtensionAPI): void {
     id: "commits",
     title: "Commits",
     placement: "left",
-    width: { preferred: 36, min: 24 },
+    width: { preferred: 48, min: 32 },
     defaultOpen: true,
     // Hunk drops a left pane that would squeeze the diff below its minimum, so
     // the review keeps its width on a narrow terminal and loses this column.
