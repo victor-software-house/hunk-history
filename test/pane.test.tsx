@@ -8,7 +8,7 @@ import { publishSeries, selectedRange, seriesSnapshot } from "../store.ts";
 import { cancelHistoryGesture, rememberHistoryScroll, rememberHistoryReveal, historySnapshot } from "../history.ts";
 import { resetPending, resetSessionId, type SessionDeps } from "../session.ts";
 import { CommitLogPane } from "../pane.tsx";
-import { ScrollBoxRenderable } from "@opentui/core";
+import { RGBA, ScrollBoxRenderable } from "@opentui/core";
 import { BrowserPane } from "../browser-pane.tsx";
 import { MessagePane } from "../pane.tsx";
 import { createSidebar } from "../sidebar.ts";
@@ -278,7 +278,7 @@ test("the second click survives a host remount between its press and release", a
   assert.deepEqual(requested.at(-1), ["diff", selectedRange(seriesSnapshot(), 1, 4)!.revisionRange]);
 });
 
-for (const width of [22, 34, 60]) {
+for (const width of [22, 23, 34, 35, 60]) {
   test(`owned tabs hover, select native files and preserve scroll at ${width} columns`, async () => {
     const sidebar = createSidebar();
     const selected: string[] = [];
@@ -286,7 +286,7 @@ for (const width of [22, 34, 60]) {
       id: `file-${index}`, path: `src/group/file-${index}.ts`, patch: "", metadata: {}, agent: null,
       stats: { additions: index + 1, deletions: 0 }, changeType: "change" as const,
     }));
-    const ui = await testRender(<BrowserPane {...props} width={width} files={files} selectedFileId={null}
+    const ui = await testRender(<BrowserPane {...props} width={width} files={files} selectedFileId="file-0"
       actions={{ ...props.actions, selectFile: (id) => { selected.push(id); } }} sidebar={sidebar} onMore={() => {}} />, { width, height: 12 });
     renderer = ui.renderer;
     const draw = async () => { await act(async () => { await ui.renderOnce(); }); await act(async () => { await ui.renderOnce(); }); };
@@ -296,6 +296,18 @@ for (const width of [22, 34, 60]) {
       await act(async () => { await ui.mockMouse.click(row.x + 2, row.y); }); await draw();
     };
     await draw();
+    const tabCells = () => ui.captureSpans().lines[0]!.spans.flatMap((span) => Array.from({ length: span.width }, () => span.bg));
+    const split = Math.floor(width / 2);
+    for (const [tab, start, end] of [["files", 0, split], ["history", split, width]] as const) {
+      await act(async () => { await ui.mockMouse.moveTo(end - 1, 0); }); await draw();
+      for (const bg of tabCells().slice(start, end)) assert.deepEqual(bg, RGBA.fromHex(props.theme.accentMuted));
+      await act(async () => { await ui.mockMouse.click(end - 1, 0); }); await draw();
+      assert.equal(sidebar.getTab(), tab);
+      await act(async () => { await ui.mockMouse.moveTo(width - 1, 11); }); await draw();
+      for (const [column, bg] of tabCells().entries()) {
+        assert.deepEqual(bg, RGBA.fromHex(column >= start && column < end ? props.theme.panelAlt : props.theme.panel));
+      }
+    }
     const before = ui.captureSpans().lines[0];
     await act(async () => { await ui.mockMouse.moveTo(2, 0); }); await draw();
     assert.notDeepEqual(ui.captureSpans().lines[0], before);
@@ -308,6 +320,14 @@ for (const width of [22, 34, 60]) {
     await click("tab-files");
     assert.equal(sidebar.getTab(), "files");
     assert.match(ui.captureCharFrame(), /file-0/);
+    const selectedRow = ui.renderer.root.findDescendantById("history-file:file-0")!;
+    const marker = ui.captureSpans().lines[selectedRow.y]!.spans[0]!;
+    assert.equal(marker.text, "▌");
+    assert.equal(marker.width, 1);
+    assert.deepEqual(marker.fg, RGBA.fromHex(props.theme.accent));
+    assert.deepEqual(marker.bg, RGBA.fromHex(props.theme.panelAlt));
+    assert.equal(selectedRow.width, width - 1); // The scrollbox reserves one scrollbar column.
+    assert.equal(selectedRow.getChildren()[1]!.x, selectedRow.x + 1);
     await click("history-file:file-0");
     assert.deepEqual(selected, ["file-0"]);
     assert.deepEqual(requested, []);

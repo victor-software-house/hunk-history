@@ -156,13 +156,8 @@ export const FileListItem = memo(function FileListItem({
       onMouseOut={() => setHovered(false)}
       onMouseUp={(event) => { if (event.button === 0 && !event.isDragging) onSelectFile(entry.id); }}
     >
-      <box
-        style={{
-          width: 1,
-          height: 1,
-          backgroundColor: selected ? theme.accent : rowBackground,
-        }}
-      />
+      <text selectable={false} fg={theme.accent} bg={rowBackground}
+        style={{ width: 1, height: 1, flexShrink: 0 }}>{selected ? "▌" : " "}</text>
       <box
         style={{
           flexGrow: 1,
