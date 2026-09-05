@@ -96,7 +96,7 @@ Extensions can observe saved user/agent note mutations through `note_changed` an
 read complete saved notes through command-context `ctx.review.snapshot()`. UI actions
 and headless CLI handlers have different contexts; a CLI handler cannot read a live
 TUI's module-local store. Use existing session commands for cross-process access.
-Read [the capability audit](../../docs/extension-capabilities.md) before changing
+Read [the capability audit](https://github.com/victor-software-house/hunk-history/blob/main/docs/extension-capabilities.md) before changing
 agent integration, note monitoring, or review control. It distinguishes published
 API 16 from unreleased main API 18 and records the exact official source inspected.
 
