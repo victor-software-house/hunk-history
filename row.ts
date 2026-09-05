@@ -30,7 +30,9 @@ export function commitRow(
   state: { active: boolean; selected: boolean },
 ): string {
   const marker = state.active ? CURRENT_MARKER : state.selected ? "│" : " ";
-  return clip(` ${marker} ${commit.abbrev} ${commit.subject}`, width);
+  const subject = ` ${marker} ${commit.subject}`;
+  const identified = `${subject} · ${commit.abbrev}`;
+  return clip(identified.length <= width ? identified : subject, width);
 }
 
 /** The pane's own heading: one commit position or the inclusive selected span. */

@@ -8,6 +8,10 @@ Developed and verified against Hunk **0.21.1** and its published extension API *
 with Git on PATH. **0.0.3** includes live history, immediate clicks, preserved
 range gestures, and the agent instructions command.
 
+The current checkout also contains a **compact layout trial**, not yet included in
+release tag 0.0.3: subject-first rows, a stable heading with a separate status/scope
+line, and a three-row default message pane. Existing explicit sizes remain respected.
+
 ## Interaction
 
 - **Single-click a commit:** request its diff immediately. No double-click waiting period.
@@ -34,9 +38,10 @@ window's PID, never an arbitrary window on the same checkout.
 
 History browsing is independent of the loaded diff. By default it follows **HEAD**,
 ordered oldest first. New commits update the list without replacing a selected
-commit or pinned range. The existing header shows **N new**; click it to review the
-newest commit. A commit outside the current history scope still retains its loaded
-message and diff.
+commit or pinned range. The status line shows **N new**; click it to review the
+newest commit. The heading keeps its commit/range position while status changes. A commit outside the current history scope still retains its loaded
+message and diff. Commit subjects lead each row; a trailing short SHA appears only
+when the complete subject and SHA fit. Exact identity remains in the loaded message.
 
 History and staged/unstaged counts are checked asynchronously every 1.5 seconds,
 with serialized Git queries. Metadata is fetched in batches and only nearby rows
@@ -55,7 +60,7 @@ its diff.
 [extension.hunk-history]
 range = "origin/main..HEAD" # optional; otherwise browse HEAD
 limit = 50                # page size, not a total-history cap
-messageRows = 8
+messageRows = 3           # compact default; expand with I or drag the divider
 ```
 
 Configuration is read at extension startup; restart Hunk after editing it.
@@ -103,7 +108,7 @@ Other explicit host pane commands are not intercepted. `[` and `]` remain Hunk's
 hunk-navigation keys.
 
 The message pane shows the author, timestamp with original UTC offset, and body.
-`messageRows` sets its initial height (3–60). Drag the divider to resize it. `I` picks
+`messageRows` sets its initial height (3–60, default 3). Drag the divider to resize it. `I` picks
 among 8, 12, 18, 26, 36 and 50 rows; longer messages report omitted lines. No message
 scrolling is introduced.
 

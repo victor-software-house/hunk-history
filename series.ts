@@ -4,7 +4,7 @@ import type { CommitMessage, SeriesCommit, SeriesSnapshot } from "./store.ts";
 export type GitRunner = (args: readonly string[]) => Promise<string | null>;
 export interface SeriesOptions { range: string | null; limit: number }
 export const DEFAULT_LIMIT = 50;
-export const DEFAULT_MESSAGE_ROWS = 8;
+export const DEFAULT_MESSAGE_ROWS = 3;
 
 /** Async, bounded subprocesses never hold the terminal's rendering thread. */
 export function gitRunner(cwd: string): GitRunner {

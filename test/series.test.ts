@@ -10,7 +10,8 @@ test("config validates scope and treats limit as bounded page size", () => {
   assert.equal(configuredLimit({ limit: 0 }), 1);
   assert.equal(configuredLimit({ limit: 1000 }), 500);
   assert.equal(configuredLimit({ limit: NaN }), DEFAULT_LIMIT);
-  assert.equal(configuredMessageRows({}), 8);
+  assert.equal(configuredMessageRows({}), 3);
+  assert.equal(configuredMessageRows({ messageRows: 8 }), 8);
   assert.equal(configuredMessageRows({ messageRows: 1 }), 3);
   assert.equal(configuredMessageRows({ messageRows: 100 }), 60);
 });

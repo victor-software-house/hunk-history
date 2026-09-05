@@ -65,6 +65,11 @@ Do not silently replace a pinned selection with a moving HEAD comparison.
 
 ## Extension behavior
 
+The checkout's compact-layout trial prioritizes subjects over hashes, keeps the
+commit/range heading visible while a separate status line changes, and defaults
+the message pane to three rows. Explicit messageRows configuration and i/I remain
+supported. This layout trial is not yet in the 0.0.3 release tag.
+
 `h` opens history in place of Files, then restores Files only if it was visible
 before history opened. Otherwise closing history leaves both hidden. The explicit
 Files control and configured exclusive `s` toggle still select Files independently.

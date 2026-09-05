@@ -115,7 +115,7 @@ export function CommitLogPane({ actions, width, height, theme, session, onFiles,
     const index = commits.findIndex((row) => row.sha === loadedSha);
     if (!view || index < 0) return;
     const row = index + (history.hasMore ? 1 : 0);
-    const visible = Math.max(1, height - 3);
+    const visible = Math.max(1, height - 4);
     if (row < view.scrollTop) view.scrollTop = row;
     else if (row >= view.scrollTop + visible) view.scrollTop = row - visible + 1;
     setOffset(view.scrollTop);
@@ -140,10 +140,11 @@ export function CommitLogPane({ actions, width, height, theme, session, onFiles,
       if (!event.isDragging) action();
     },
   });
-  const label = anchor ? " End · Esc" : pending ? " Loading" : history.error ? ` ${history.error}`
+  const label = seriesHeading(position, commits.length, width - 7, range) + (history.hasMore ? "+" : "");
+  const status = anchor ? " End · Esc" : pending ? " Loading" : history.error ? ` ${history.error}`
     : history.newCommits > 0 ? ` ${history.newCommits} new · click to view`
     : snapshot.commit && position === null ? " Commit outside scope"
-    : seriesHeading(position, commits.length, width - 7, range) + (history.hasMore ? "+" : "");
+    : ` Scope: ${history.scope}`;
 
   return (
     <box style={{ width, height, overflow: "hidden", backgroundColor: theme.panel, flexDirection: "column" }}>
@@ -153,14 +154,16 @@ export function CommitLogPane({ actions, width, height, theme, session, onFiles,
           bg={hovered === "files" ? theme.accentMuted : theme.panelAlt}
           style={{ width: 7, height: 1, flexShrink: 0 }}
           {...handlers("files", () => { cancel(); onFiles(); })}>{"[Files]"}</text>
-        <text wrapMode="none" selectable={false} fg={anchor ? theme.text : theme.muted}
-          style={{ width: Math.max(0, width - 7), height: 1, flexShrink: 0 }}
-          {...handlers("new", () => {
-            if (history.newCommits > 0 && !anchor && commits.at(-1)) {
-              cancel(); acknowledgeNewCommits(); requestCommit(commits.at(-1)!.sha, actions.notify, session);
-            }
-          })}>{clip(label, width - 7)}</text>
+        <text id="history-heading" wrapMode="none" selectable={false} fg={theme.muted}
+          style={{ width: Math.max(0, width - 7), height: 1, flexShrink: 0 }}>{clip(label, width - 7)}</text>
       </box>
+      <text id="history-status" wrapMode="none" selectable={false} fg={anchor || history.error ? theme.text : theme.muted}
+        style={{ width, height: 1, flexShrink: 0 }}
+        {...handlers("new", () => {
+          if (history.newCommits > 0 && !anchor && commits.at(-1)) {
+            cancel(); acknowledgeNewCommits(); requestCommit(commits.at(-1)!.sha, actions.notify, session);
+          }
+        })}>{clip(status, width)}</text>
       {(["staged", "unstaged"] as const).map((kind) => {
         const active = pending?.kind === "working" ? pending.value === kind : !pending && snapshot.review?.endsWith(kind === "staged" ? " staged changes" : " working tree");
         const background = active ? theme.selectedHunk : hovered === kind ? theme.panelAlt : theme.panel;

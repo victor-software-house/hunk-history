@@ -25,16 +25,22 @@ test("a line that overruns its column is clipped, never wrapped", () => {
 test("the reviewed commit is the marked row", () => {
   assert.equal(
     commitRow(COMMIT, 60, { active: true, selected: true }),
-    " ▸ 8610b105 regenerate the open-api spec",
+    " ▸ regenerate the open-api spec · 8610b105",
   );
   assert.equal(
     commitRow(COMMIT, 60, { active: false, selected: true }),
-    " │ 8610b105 regenerate the open-api spec",
+    " │ regenerate the open-api spec · 8610b105",
   );
   assert.equal(
     commitRow(COMMIT, 60, { active: false, selected: false }),
-    "   8610b105 regenerate the open-api spec",
+    "   regenerate the open-api spec · 8610b105",
   );
+});
+
+test("subjects take priority over hashes in narrow history rows", () => {
+  const state = { active: true, selected: true };
+  assert.equal(commitRow(COMMIT, 34, state), " ▸ regenerate the open-api spec");
+  assert.equal(commitRow(COMMIT, 22, state), " ▸ regenerate the ope…");
 });
 
 test("a commit row never exceeds the pane width", () => {

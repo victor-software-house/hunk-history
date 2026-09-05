@@ -55,9 +55,9 @@ beforeEach(() => {
 });
 afterEach(() => { act(() => { renderer?.destroy(); }); });
 
-async function pane(session = deps()) {
-  const setup = await testRender(<CommitLogPane {...props} session={session}
-    onFiles={() => { filesShown++; }} />, { width: 34, height: 12 });
+async function pane(session = deps(), width = 34) {
+  const setup = await testRender(<CommitLogPane {...props} width={width} session={session}
+    onFiles={() => { filesShown++; }} />, { width, height: 12 });
   renderer = setup.renderer;
   const renderFrame = async () => {
     await act(async () => { await setup.renderOnce(); });
@@ -77,6 +77,22 @@ async function pane(session = deps()) {
     async click(index: number) { await this.clickId(`commit-log-row-${index}`); },
     async double(index: number) { await this.click(index); await this.click(index); },
   };
+}
+
+for (const width of [22, 34, 60]) {
+  test(`history keeps its heading and fixed status row at ${width} columns`, async () => {
+    const ui = await pane(deps(), width);
+    assert.match(ui.captureCharFrame(), /Commits/);
+    assert.match(ui.captureCharFrame(), /Scope: HEAD/);
+    const status = ui.renderer.root.findDescendantById("history-status");
+    const working = ui.renderer.root.findDescendantById("review-staged");
+    assert.ok(status && working);
+    assert.equal(working.y, status.y + 1);
+    await ui.double(1);
+    assert.match(ui.captureCharFrame(), /Commits/);
+    assert.match(ui.captureCharFrame(), /End · Esc/);
+    assert.equal(ui.renderer.root.findDescendantById("review-staged")?.y, working.y);
+  });
 }
 
 test("single clicks dispatch immediately, not after a double-click timeout", async () => {
