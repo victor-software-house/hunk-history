@@ -4,7 +4,7 @@ import { useKeyboard } from "@opentui/react";
 import type { ExtensionPaneProps } from "hunkdiff/extension";
 import { messageRows, type Tone } from "./highlight.ts";
 import { commitRow, seriesHeading } from "./row.ts";
-import { requestCommit, requestRange, type SessionDeps } from "./session.ts";
+import { pendingReview, subscribePending, requestCommit, requestRange, type SessionDeps } from "./session.ts";
 import { isSelectedIndex, selectedRange, seriesSnapshot, subscribeSeries } from "./store.ts";
 
 export interface CommitLogPaneProps extends ExtensionPaneProps {
@@ -21,6 +21,15 @@ function rowId(index: number): string {
 export function CommitLogPane({ actions, width, height, theme, session, onFiles }: CommitLogPaneProps): ReactNode {
   const snapshot = useSyncExternalStore(subscribeSeries, seriesSnapshot);
   const { commits, position, range } = snapshot;
+  const pending = useSyncExternalStore(subscribePending, pendingReview);
+  const painted = pending?.kind === "range" && pending.selection
+    ? { ...snapshot, range: pending.selection, position: pending.selection.endpoint }
+    : pending?.kind === "commit"
+      ? { ...snapshot, range: null, position: commits.findIndex((commit) => commit.sha === pending.value) }
+      : snapshot;
+  const loadingLabel = painted.range
+    ? ` Loading ${painted.range.start + 1}–${painted.range.end + 1}`
+    : ` Loading ${(painted.position ?? -1) + 1}`;
   const scroll = useRef<ScrollBoxRenderable | null>(null);
   const [anchor, setAnchor] = useState<string | null>(null);
   const [filesHovered, setFilesHovered] = useState(false);
@@ -101,7 +110,7 @@ export function CommitLogPane({ actions, width, height, theme, session, onFiles 
           }}>{"[Files]"}</text>
         <text wrapMode="none" selectable={false} fg={anchor ? theme.text : theme.muted} bg={theme.panel}
           style={{ width: Math.max(0, width - 9), height: 1, flexShrink: 0 }}>
-          {anchor ? " End · Esc" : seriesHeading(position, commits.length, Math.max(0, width - 9), range)}
+          {anchor ? " End · Esc" : pending ? loadingLabel : seriesHeading(position, commits.length, Math.max(0, width - 9), range)}
         </text>
       </box>
       <scrollbox ref={scroll} focused={false} scrollY={true}
@@ -109,11 +118,14 @@ export function CommitLogPane({ actions, width, height, theme, session, onFiles 
         rootOptions={{ backgroundColor: theme.panel }} wrapperOptions={{ backgroundColor: theme.panel }}
         viewportOptions={{ backgroundColor: theme.panel }} contentOptions={{ backgroundColor: theme.panel }}
         verticalScrollbarOptions={{ visible: false }} horizontalScrollbarOptions={{ visible: false }}>
-        {commits.map((commit, index) => (
-          <text key={commit.sha} id={rowId(index)} wrapMode="none" selectable={false}
-            style={{ height: 1, flexShrink: 0, width: "100%" }}
-            fg={theme.text}
-            bg={anchor === commit.sha ? theme.accentMuted : hoveredCommit === commit.sha ? theme.panelAlt : isSelectedIndex(snapshot, index) ? theme.selectedHunk : theme.panel}
+        {commits.map((commit, index) => {
+          const selected = isSelectedIndex(painted, index);
+          const background = anchor === commit.sha ? theme.accentMuted
+            : selected ? theme.selectedHunk
+            : hoveredCommit === commit.sha ? theme.panelAlt : theme.panel;
+          return (
+          <box key={commit.sha} id={rowId(index)}
+            style={{ height: 1, flexShrink: 0, width: "100%", backgroundColor: background }}
             onMouseOver={() => setHoveredCommit(commit.sha)}
             onMouseOut={() => setHoveredCommit(null)}
             onMouseDown={(event: TuiMouseEvent) => {
@@ -130,9 +142,13 @@ export function CommitLogPane({ actions, width, height, theme, session, onFiles 
               pressed.current = null;
               if (!event.isDragging) choose(commit.sha);
             }}>
-            {commitRow(commit, width, { active: index === position, selected: isSelectedIndex(snapshot, index) })}
-          </text>
-        ))}
+            <text wrapMode="none" selectable={false}
+              fg={hoveredCommit === commit.sha && selected ? theme.accent : theme.text} bg={background}>
+              {commitRow(commit, width, { active: index === painted.position, selected })}
+            </text>
+          </box>
+          );
+        })}
       </scrollbox>
     </box>
   );

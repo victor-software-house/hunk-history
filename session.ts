@@ -113,6 +113,21 @@ export function loadRange(range: string, deps: SessionDeps): Promise<string | nu
 
 let inFlight: ReviewTarget | null = null;
 let queued: ReviewTarget | null = null;
+const pendingListeners = new Set<() => void>();
+
+/** Latest requested review, distinct from the successfully loaded series. */
+export function pendingReview(): ReviewTarget | null {
+  return queued ?? inFlight;
+}
+
+export function subscribePending(listener: () => void): () => void {
+  pendingListeners.add(listener);
+  return () => { pendingListeners.delete(listener); };
+}
+
+function notifyPending(): void {
+  for (const listener of pendingListeners) listener();
+}
 
 /** Only the matching changeset transform may commit this selection to the pane. */
 export function pendingRange(): SeriesRange | null {
@@ -141,6 +156,7 @@ export function pendingCommit(): string | null {
 export function resetPending(): void {
   inFlight = null;
   queued = null;
+  notifyPending();
 }
 
 /**
@@ -177,10 +193,12 @@ function requestReview(
 ): void {
   if (inFlight !== null) {
     queued = sameTarget(target, inFlight) ? null : target;
+    notifyPending();
     return;
   }
 
   inFlight = target;
+  notifyPending();
   void loadReview(target, deps).then((problem) => {
     inFlight = null;
     if (problem !== null) {
@@ -191,6 +209,8 @@ function requestReview(
     queued = null;
     if (next !== null && !sameTarget(next, target)) {
       requestReview(next, report, deps);
+    } else {
+      notifyPending();
     }
   });
 }

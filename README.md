@@ -23,7 +23,9 @@ Requires Hunk 0.19.0 or newer (extension API 6) and Git on PATH.
   is loaded, a single click returns to a single-commit review.
 
 No dragging, Shift-click, ellipsis menu or separate Apply action is required.
-Failed loads retain the previously loaded selection and message.
+The closing click highlights the requested range immediately with a **Loading** label.
+The diff remains the previously loaded review until the request succeeds; failure restores its
+selection. Selected backgrounds stay continuous during hover, including trailing row space.
 
 The commit header shows its position in the series, SHA and subject. The message
 pane shows the author, full timestamp with original UTC offset, and wrapped body.

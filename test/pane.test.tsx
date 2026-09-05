@@ -207,3 +207,30 @@ test("commit hover paints immediately without navigating and preserves the range
   assert.deepEqual(ui.captureSpans().lines[row.y], anchored);
   assert.deepEqual(requested, []);
 });
+
+test("final click paints the range immediately, hover keeps it continuous, failure restores it", async () => {
+  let finish: ((result: string | null) => void) | undefined;
+  const ui = await pane({ ...session, run: async (args) => {
+    if (args[4] === "diff") return new Promise<string | null>((resolve) => { finish = resolve; });
+    return session.run(args);
+  } });
+  const loaded = seriesSnapshot();
+  const selectedBackground = ui.captureSpans().lines[1]!.spans[0]!.bg;
+  await ui.click(1, true);
+  await ui.click(3);
+  assert.ok(finish, "daemon is still waiting");
+  assert.match(ui.captureCharFrame(), /Loading 2–4/);
+  assert.equal(seriesSnapshot(), loaded);
+  const hovered = ui.renderer.root.findDescendantById("commit-log-row-2");
+  assert.ok(hovered);
+  await act(async () => { await ui.mockMouse.moveTo(hovered.x + 2, hovered.y); });
+  await ui.renderOnce();
+  for (const line of ui.captureSpans().lines.slice(2, 5)) {
+    for (const span of line.spans) assert.deepEqual(span.bg, selectedBackground, JSON.stringify(line));
+  }
+  await act(async () => { finish!(null); });
+  await ui.renderOnce();
+  assert.equal(seriesSnapshot(), loaded);
+  assert.doesNotMatch(ui.captureCharFrame(), /Loading/);
+  assert.deepEqual(ui.captureSpans().lines[1]!.spans[0]!.bg, selectedBackground);
+});
