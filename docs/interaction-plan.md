@@ -7,7 +7,11 @@
   separate Apply step. Earlier control-heavy approaches were rejected.
 - The first click of a double-click may start loading its commit. Its completion
   must not erase double-click recognition or the armed range.
-- Preserve the accepted `h` Files/Commits switch and explicit exclusive `s` override.
+- `h` temporarily replaces Files with History and restores its prior visibility.
+  If Files was hidden, closing History must leave both hidden. Keep the explicit
+  Files control and exclusive `s` override unchanged.
+- The operator requested this bounded correction within 0.0.3: move its existing
+  tag after verification instead of bumping. Layout redesign is separate follow-up.
 - Support live history, new commits, and selectable staged/unstaged reviews without
   replacing a pinned review or cluttering the interface.
 - Make supported operations discoverable to coding agents. Published Hunk supports

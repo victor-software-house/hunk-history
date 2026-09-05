@@ -65,6 +65,10 @@ Do not silently replace a pinned selection with a moving HEAD comparison.
 
 ## Extension behavior
 
+`h` opens history in place of Files, then restores Files only if it was visible
+before history opened. Otherwise closing history leaves both hidden. The explicit
+Files control and configured exclusive `s` toggle still select Files independently.
+
 The live-approved history implementation follows HEAD independently of the selected diff;
 configured scopes remain explicit. History and working-state counts refresh without
 replacing the pinned review. Loading more history is paginated and rendering is

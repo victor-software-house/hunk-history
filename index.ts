@@ -14,14 +14,15 @@ import {
   seriesSnapshot,
 } from "./store.ts";
 import { createElement } from "react";
-import { showSidebar, toggleFiles } from "./sidebar.ts";
+import { createSidebar } from "./sidebar.ts";
 import { historyInstructions } from "./cli.ts";
 
 export default function registerCommitLog(hunk: HunkExtensionAPI): void {
+  const sidebar = createSidebar();
   hunk.registerCliCommand({ name: "history", summary: "Read history extension instructions", usage: "<instructions|help>" }, historyInstructions);
   hunk.events.on("hunk-history:files", (_event, ctx) => {
     cancelHistoryGesture();
-    showSidebar(ctx.panes, "files");
+    sidebar.show(ctx.panes, "files");
   });
   const configured = configuredRange(hunk.config);
   const history = new HistoryController({ range: configured, limit: configuredLimit(hunk.config) });
@@ -116,18 +117,18 @@ export default function registerCommitLog(hunk: HunkExtensionAPI): void {
     });
   }
 
-  hunk.registerCommand({ id: "toggle", title: "Switch Files / Commits", key: "h" }, (ctx) => {
+  hunk.registerCommand({ id: "toggle", title: "Toggle history", key: "h" }, (ctx) => {
     if (historySnapshot().root === null) {
       ctx.notify("History requires a Git repository", "info");
       return;
     }
     cancelHistoryGesture();
-    showSidebar(ctx.panes, ctx.panes.isOpen("commits") ? "files" : "commits");
+    sidebar.toggleHistory(ctx.panes);
   });
 
   hunk.registerCommand({ id: "files", title: "Toggle Files exclusively" }, (ctx) => {
     cancelHistoryGesture();
-    toggleFiles(ctx.panes);
+    sidebar.toggleFiles(ctx.panes);
   });
 
   hunk.registerCommand({ id: "scope", title: "Choose history scope" }, chooseScope);
@@ -186,7 +187,7 @@ export default function registerCommitLog(hunk: HunkExtensionAPI): void {
   // that fit the last one is the wrong pane to leave open.
   hunk.on("changeset_loaded", (_event, ctx) => {
     if (ctx.panes.isOpen("commits")) {
-      showSidebar(ctx.panes, historySnapshot().root === null ? "files" : "commits");
+      sidebar.show(ctx.panes, historySnapshot().root === null ? "files" : "commits");
     }
     if (expanded && hasMessage()) {
       showMessageAt(ctx, true);
@@ -224,7 +225,7 @@ export default function registerCommitLog(hunk: HunkExtensionAPI): void {
   // Opening the pane reveals the area, which `defaultOpen` alone does not do,
   // so the commit list is there at the width a terminal usually has.
   hunk.on("startup", (_event, ctx) => {
-    if (historySnapshot().root !== null) showSidebar(ctx.panes, "commits");
+    if (historySnapshot().root !== null) sidebar.show(ctx.panes, "commits");
     history.start();
   });
   hunk.on("session_reload", () => { void history.refresh(); });

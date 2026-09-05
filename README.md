@@ -20,8 +20,10 @@ range gestures, and the agent instructions command.
 - **Staged / Unstaged:** two compact rows above history select those comparisons.
   Counts are changed paths, not hunks; a partly staged file can count in both rows.
   Unstaged includes untracked files. Zero is a valid empty review, not a disabled action.
-- **Files / Commits:** `h` swaps views in one sidebar. `[Files]` switches back to the
-  native file tree. Default history width is 34 columns; narrow terminals may hide it.
+- **Files / Commits:** `h` toggles history in one sidebar. Opening history hides
+  Files; closing it restores Files only if Files was visible when history opened.
+  Otherwise both remain hidden. `[Files]` explicitly opens the native file tree.
+  Default history width is 34 columns; narrow terminals may hide it.
 
 Requested selections paint immediately with `Loading`. The old diff remains until
 the reload succeeds; failures restore its selection. Reloads serialize and rapid
@@ -66,7 +68,7 @@ commands. The separate CLI tree exposes instructions and help.
 | Key | Command id | Action |
 |:--|:--|:--|
 | `n` / `p` | `hunk-history.next` / `.previous` | Next / previous commit; no wrap |
-| `h` | `hunk-history.toggle` | Switch Files / Commits |
+| `h` | `hunk-history.toggle` | Toggle history; restore prior Files visibility |
 | — | `hunk-history.files` | Close Commits, toggle Files |
 | `i` | `hunk-history.message` | Toggle commit message |
 | `I` | `hunk-history.expand` | Fit/collapse message |
