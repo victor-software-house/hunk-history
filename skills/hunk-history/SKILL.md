@@ -5,6 +5,17 @@ description: Use when reviewing commits, inclusive or live ranges, new commits, 
 
 # Hunk History
 
+Retrieve this document from the enabled extension with `hunk history instructions`.
+It is the same bundled file, not a separately maintained command manual. Check
+`hunk --version`, then read the file returned by `hunk skill path review` for core
+commands. If the history command is unavailable, do not assume history UI features
+or silently install/enable the extension. Native show/diff/session commands below
+do not require this extension.
+
+CLI availability does not prove the extension is loaded in a particular live TUI.
+Recheck assumptions after reloads, session changes or command failures; previously
+loaded instructions do not grant or establish current capabilities.
+
 Use the existing Hunk daemon CLI; do not launch an interactive TUI in a plain shell
 or change a user's active review unless the task authorizes navigation.
 
@@ -67,7 +78,8 @@ button or modifier gesture is required.
 History scope, refresh, older pages and live comparisons are available through
 Hunk's Extensions menu. Those are **UI command ids, not daemon subcommands**.
 Published Hunk 0.21.1 supports extension-owned top-level CLI trees through
-`registerCliCommand`; hunk-history does not register one yet. It cannot add custom
+`registerCliCommand`; hunk-history provides `hunk history instructions` and
+`hunk history --help`. It cannot add custom
 subcommands to `hunk session` or inject instructions into an agent automatically.
 Read this guide directly or load it as a skill. A CLI-created range is reviewable
 but need not produce an extension-created highlighted range in the sidebar.

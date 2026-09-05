@@ -122,9 +122,12 @@ the supported session reload path. Do not adopt unreleased imports or pretend np
    `requestReload()` would not replace it even after that API is released.
 4. Independent async Git history/index polling is justified: host watch follows the
    selected diff, which can be pinned to old commits.
-5. A future native `hunk history` command tree can expose agent instructions and
-   stateless Git history queries or wrap supported session operations. It must not
-   pretend to access live pane-private state. No such tree is implemented yet.
+5. The native `hunk history instructions` command reads the bundled skill verbatim;
+   `hunk history --help` explains usage. It does not inspect live pane-private state
+   or prove that the extension is enabled in a selected window. Stateless queries
+   and additional session wrappers remain unimplemented. Global agent guidance
+   should discover installed core instructions and conditionally load this command,
+   rather than copy either manual.
 6. The current agent guide documents real built-in session operations. UI command ids
    remain UI-only. Original show/range title recognition is a host-convention dependency,
    not a typed review-target API; do not reuse it as an agent wire protocol.

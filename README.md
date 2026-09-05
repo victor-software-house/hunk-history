@@ -126,16 +126,21 @@ session diff reload does not reload extension code.
 
 ## Coding agents
 
-Read the bundled [Hunk History agent guide](skills/hunk-history/SKILL.md). It documents
+Run `hunk history instructions` to read the bundled
+[Hunk History agent guide](skills/hunk-history/SKILL.md), or `hunk history --help`
+for usage. The command reads that exact file. It documents
 supported `hunk session reload`, `context` and `review` operations for pinned/live
 ranges and working states. Agents can load this file directly, or operators can
 register its directory with their agent's skill loader.
 
-**Hunk does not automatically inject this guide into an agent's context.** Extensions
-can register top-level CLI command trees with `registerCliCommand`, but this extension
-currently registers UI commands only. Hunk does not support custom subcommands under
-`hunk session`, and the UI ids above are not remotely executable session commands.
-The guide uses the existing supported CLI. See the
+**Hunk does not automatically inject this guide into an agent's context.** This
+extension registers a top-level `history` CLI tree for instructions and help.
+Other operations use native session commands; UI ids remain UI-only. Installed
+is not necessarily enabled, and CLI availability does not prove the extension is
+loaded in a particular live window. Recheck after reloads/session changes and do
+not silently enable a missing extension. Hunk does not support custom subcommands under
+`hunk session`. Read the installed core guide using `hunk skill path review` rather
+than maintaining a copied host manual. See the
 [capability and ownership audit](docs/extension-capabilities.md) for agent-callable
 commands, comment monitoring, snapshots, and published-versus-main API differences.
 
