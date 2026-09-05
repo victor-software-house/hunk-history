@@ -7,7 +7,7 @@
 - Do not bump the version or release until the user has live-tested and approved.
 - Preserve double-click to start a range. Single clicks must dispatch immediately. Do not add a Range control or replace the gesture with unusual key combinations; those approaches were already rejected.
 
-## Trial choices (agent implementation choices, pending live approval)
+## Implemented trial choices (live-approved)
 
 - Single clicks request immediately, including the first click of a double-click. A second click on the same SHA arms the range; the next endpoint click applies it. Preserve double-click recognition and the armed anchor across completion of that first request. Escape cancels. No extra range control or new key combination.
 - Keep one Files/Commits sidebar. Staged and Unstaged remain selectable above history.
@@ -35,16 +35,25 @@
   it into model context: an agent must read it or its operator must register it
   with the agent's skill loader.
 
-Operator live testing and approval are still outstanding. Automated tests and a
-separate PTY smoke do not approve the interaction direction on the operator's behalf.
+The operator has now live-tested and approved the direction. The evidence above
+records the initial 0.21.0 trial; subsequent dependency alignment targets published
+Hunk 0.21.1/API16. Versioning and release remain separate actions.
 
 ## Steps and proof
 
 1. Async history and independent refresh, stable SHA selection, staged/unstaged counts → real Git fixtures including new commits, scope, pagination and index changes.
 2. Immediate clicks, preserved double-click range selection, compact source/scope controls and windowed rows → rendered pointer tests covering the first request finishing before/between/after the double-click and endpoint, plus pending/failure behavior.
 3. Integrate lifecycle, commands, live comparisons and agent guide → registration tests, typecheck, complete suite, clean diff.
-4. Provide checkout-based live test invocation; preserve installed release → version remains 0.0.2 and user live approval remains outstanding.
+4. Provide checkout-based live test invocation; preserve installed release → version remains 0.0.2. User live approval is recorded; publication remains separate.
 
 Expected files: series.ts, store.ts, session.ts, index.ts, pane.tsx, tests, README.md, docs/interaction-plan.md and a bundled skills/hunk-history/SKILL.md. A history controller may own polling and scope reconciliation so React and lifecycle handlers share one state path.
 
-Non-goals: staging mutations, host changes, new dependencies, new services, package-manager migration, release, automatic replacement of installed files. Existing message layout and Files exclusion stay intact.
+Initial trial non-goals: staging mutations, host changes, new dependencies, new services, package-manager migration, release, automatic replacement of installed files. Existing message layout and Files exclusion stay intact. The follow-up below explicitly authorizes host and existing-dependency upgrades.
+
+The operator subsequently live-tested and approved the interaction. Follow-up work
+is the official Hunk capability audit and latest host/SDK/toolchain alignment,
+including TypeScript. Comment display is accepted; do not redesign note ownership.
+
+Correction after inspecting actual published Hunk: top-level CLI command trees are
+supported through `registerCliCommand`. Model instruction injection and custom
+session-daemon methods are not. See [the capability audit](extension-capabilities.md).

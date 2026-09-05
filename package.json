@@ -5,16 +5,16 @@
   "type": "module",
   "license": "MIT",
   "hunk": {
-    "apiVersion": 6
+    "apiVersion": 16
   },
   "devDependencies": {
-    "@opentui/core": "^0.5.8",
-    "@opentui/react": "^0.5.8",
-    "@types/node": "^22.10.2",
+    "@opentui/core": "^0.5.10",
+    "@opentui/react": "^0.5.10",
+    "@types/node": "^26.4.1",
     "@types/react": "^19.2.18",
-    "hunkdiff": "^0.19.0",
+    "hunkdiff": "^0.21.1",
     "react": "^19.2.8",
-    "typescript": "^5.7.2"
+    "typescript": "^7.0.2"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

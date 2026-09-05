@@ -4,9 +4,9 @@ Browse live Git history, review individual commits and inclusive ranges, and swi
 between staged and unstaged changes in [Hunk](https://hunk.dev). Built on
 [Sadick Mwakio's hunk-commit-log](https://github.com/sadick254/hunk-commit-log).
 
-Requires Hunk 0.19.0 or newer (extension API 6) and Git on PATH. The current checkout
-contains an **unreleased live-history trial**; version stays **0.0.2** until the
-operator has live-tested and approved the direction. No new release is authorized.
+Developed and verified against Hunk **0.21.1** and its published extension API **16**,
+with Git on PATH. The live-history direction has been **live-tested and approved**.
+The extension version remains **0.0.2** pending a separate release action.
 
 ## Interaction
 
@@ -131,10 +131,13 @@ supported `hunk session reload`, `context` and `review` operations for pinned/li
 ranges and working states. Agents can load this file directly, or operators can
 register its directory with their agent's skill loader.
 
-**Hunk does not automatically inject this guide into an agent's context.** Its public
-extension API exposes UI commands, not agent instructions, custom session commands,
-or CLI subcommands. The UI command ids above are not remotely executable session
-commands. The guide uses only the CLI surface Hunk actually supports.
+**Hunk does not automatically inject this guide into an agent's context.** Extensions
+can register top-level CLI command trees with `registerCliCommand`, but this extension
+currently registers UI commands only. Hunk does not support custom subcommands under
+`hunk session`, and the UI ids above are not remotely executable session commands.
+The guide uses the existing supported CLI. See the
+[capability and ownership audit](docs/extension-capabilities.md) for agent-callable
+commands, comment monitoring, snapshots, and published-versus-main API differences.
 
 ## Development
 
@@ -151,4 +154,5 @@ suite, including full-pane remounts, immediate dispatch, request ordering, scrol
 hover and failures. No new dependencies or test framework are needed.
 
 [Trial plan](docs/live-history-plan.md) · [Interaction decisions](docs/interaction-plan.md).
-Live operator approval and any version/release action remain separate gates.
+The interaction is approved; versioning, publication and installed-extension replacement
+remain separate actions.

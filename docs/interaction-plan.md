@@ -10,11 +10,16 @@
 - Preserve the accepted `h` Files/Commits switch and explicit exclusive `s` override.
 - Support live history, new commits, and selectable staged/unstaged reviews without
   replacing a pinned review or cluttering the interface.
-- Make supported operations discoverable to coding agents. Hunk has no public
-  extension instruction/custom session-command hook; use the bundled agent guide
-  and existing CLI, not invented remotely callable UI commands.
-- **Version remains 0.0.2. No bump, tag or release until operator live testing and
-  explicit approval.** The previous 0.0.2 release approval does not approve this trial.
+- Make supported operations discoverable to coding agents. Published Hunk supports
+  top-level extension CLI trees and saved-note monitoring/snapshots. It does not
+  inject model instructions or support extension-defined `hunk session` subcommands.
+- The operator live-tested and approved the interaction. Comment display is fine;
+  the follow-up concerns programmatic agent behavior, not a comment-isolation redesign.
+- Update the official Hunk host, SDK and all development dependencies (including
+  TypeScript) to latest stable. Use the official upstream, never the retired local
+  Hunk fork. See [the capability audit](extension-capabilities.md).
+- **Version remains 0.0.2 pending a separate release action.** Live approval has been
+  granted; it is no longer an outstanding interaction gate.
 
 ## Implementation
 

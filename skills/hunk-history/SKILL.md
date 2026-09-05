@@ -54,7 +54,7 @@ Do not silently replace a pinned selection with a moving HEAD comparison.
 
 ## Extension behavior
 
-The unreleased live-history trial follows HEAD independently of the selected diff;
+The live-approved history implementation follows HEAD independently of the selected diff;
 configured scopes remain explicit. History and working-state counts refresh without
 replacing the pinned review. Loading more history is paginated and rendering is
 windowed. An old selected commit can remain loaded outside the browsed scope.
@@ -66,11 +66,28 @@ button or modifier gesture is required.
 
 History scope, refresh, older pages and live comparisons are available through
 Hunk's Extensions menu. Those are **UI command ids, not daemon subcommands**.
-The current public extension API cannot register model instructions, custom session
-commands or CLI subcommands. This guide must be read or loaded as an agent skill;
-Hunk does not inject it automatically. A CLI-created range is reviewable but need
-not produce an extension-created highlighted range in the sidebar.
+Published Hunk 0.21.1 supports extension-owned top-level CLI trees through
+`registerCliCommand`; hunk-history does not register one yet. It cannot add custom
+subcommands to `hunk session` or inject instructions into an agent automatically.
+Read this guide directly or load it as a skill. A CLI-created range is reviewable
+but need not produce an extension-created highlighted range in the sidebar.
 
-The Git-tagged 0.0.2 release predates the live-history trial. Check the loaded source
-before assuming trial behavior. Do not bump or release the trial until the operator
-has live-tested and explicitly approved it.
+## Comments and extension capabilities
+
+Comment commands act on the selected session's current comparison and old/new line
+coordinates. Notes are session review state, not comments permanently owned by a
+commit SHA. Refreshes and changes of comparison can retain notes on matching files.
+Inspect the current session and comment list before editing or removing notes; do
+not infer ownership from HEAD or from the originally displayed commit.
+
+Extensions can observe saved user/agent note mutations through `note_changed` and
+read complete saved notes through command-context `ctx.review.snapshot()`. UI actions
+and headless CLI handlers have different contexts; a CLI handler cannot read a live
+TUI's module-local store. Use existing session commands for cross-process access.
+Read [the capability audit](../../docs/extension-capabilities.md) before changing
+agent integration, note monitoring, or review control. It distinguishes published
+API 16 from unreleased main API 18 and records the exact official source inspected.
+
+The Git-tagged 0.0.2 release predates live-history changes. The operator has approved
+the live-tested direction; source remains version 0.0.2 pending a separate release.
+Check the loaded source before assuming the installed extension includes these changes.
