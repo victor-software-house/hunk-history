@@ -1,9 +1,8 @@
 /**
  * One commit in the series behind the current review.
  *
- * Ordered oldest first everywhere in this extension, the way a patch series
- * reads, so the position shown in the header, the order of the rows in the
- * pane, and the direction the stepping keys will move all agree.
+ * Ordered newest first everywhere in this extension, matching `git log` and
+ * keeping the most relevant commits at the top of the History pane.
  */
 export interface SeriesCommit {
   sha: string;
@@ -22,7 +21,7 @@ export interface CommitMessage {
   body: string;
 }
 
-/** One inclusive contiguous selection in the oldest-first commit series. */
+/** One inclusive contiguous selection in the newest-first commit series. */
 export interface SeriesRange {
   readonly anchorSha: string;
   readonly endpointSha: string;
@@ -125,11 +124,10 @@ export function messagePanes(message: CommitMessage | null): {
 }
 
 /**
- * The commit `delta` steps along the series from the reviewed one.
+ * The commit `delta` steps along the displayed newest-first series.
  *
  * Null at either end and outside a revision show. Stepping deliberately does
- * not wrap: arriving at the oldest commit of a branch by pressing "next" once
- * more would tell the reviewer nothing about where they are.
+ * not wrap, so the pane's row order and keyboard movement remain consistent.
  */
 export function neighbour(
   snapshot: SeriesSnapshot,
@@ -163,8 +161,8 @@ export function selectedRange(
 
   const start = Math.min(anchor, endpoint);
   const end = Math.max(anchor, endpoint);
-  const oldest = snapshot.commits[start];
-  const newest = snapshot.commits[end];
+  const newest = snapshot.commits[start];
+  const oldest = snapshot.commits[end];
   if (!oldest?.baseSha || !newest) {
     return null;
   }

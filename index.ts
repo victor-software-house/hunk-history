@@ -186,8 +186,8 @@ export default function registerCommitLog(hunk: HunkExtensionAPI): void {
   // `]` and `[` are already next and previous hunk, and a built-in keeps a
   // chord an extension asks for, so stepping between commits gets n and p.
   for (const step of [
-    { id: "next", title: "Next commit in the series", key: "n", delta: 1, edge: "newest" },
-    { id: "previous", title: "Previous commit in the series", key: "p", delta: -1, edge: "oldest" },
+    { id: "next", title: "Next commit in the list", key: "n", delta: 1, edge: "oldest" },
+    { id: "previous", title: "Previous commit in the list", key: "p", delta: -1, edge: "newest" },
   ] as const) {
     hunk.registerCommand({ id: step.id, title: step.title, key: step.key }, async (ctx) => {
       const snapshot = seriesSnapshot();
@@ -196,7 +196,7 @@ export default function registerCommitLog(hunk: HunkExtensionAPI): void {
       }
 
       let target = neighbour(snapshot, step.delta, pendingCommit());
-      if (target === null && step.delta === -1 && historySnapshot().hasMore) {
+      if (target === null && step.delta === 1 && historySnapshot().hasMore) {
         await history.refresh(true);
         target = neighbour(seriesSnapshot(), step.delta, pendingCommit());
       }

@@ -27,7 +27,7 @@ function commit(n: number): SeriesCommit {
   };
 }
 
-const SERIES = [commit(1), commit(2), commit(3)];
+const SERIES = [commit(3), commit(2), commit(1)];
 
 beforeEach(() => {
   publishSeries(EMPTY_SERIES);
@@ -59,7 +59,7 @@ test("an unchanged series keeps its snapshot and wakes nobody", () => {
     woken += 1;
   });
 
-  publishSeries({ commits: [commit(1), commit(2), commit(3)], position: 1, range: null, message: null });
+  publishSeries({ commits: [commit(3), commit(2), commit(1)], position: 1, range: null, message: null });
 
   assert.equal(woken, 0, "a refresh that changes nothing must not repaint");
   assert.equal(seriesSnapshot(), before, "React compares snapshots by identity");
@@ -105,11 +105,11 @@ test("an unsubscribed pane stops hearing about reloads", () => {
   assert.equal(woken, 0);
 });
 
-test("stepping moves along the series from the reviewed commit", () => {
+test("stepping follows the displayed newest-first series", () => {
   const snapshot = { commits: SERIES, position: 1, range: null, message: null } as const;
 
-  assert.equal(neighbour(snapshot, 1)?.abbrev, "3333333");
-  assert.equal(neighbour(snapshot, -1)?.abbrev, "1111111");
+  assert.equal(neighbour(snapshot, 1)?.abbrev, "1111111");
+  assert.equal(neighbour(snapshot, -1)?.abbrev, "3333333");
 });
 
 test("stepping stops at both ends rather than wrapping", () => {
@@ -125,7 +125,7 @@ test("stepping outside a commit review has nowhere to go", () => {
 test("stepping counts from the commit already being loaded", () => {
   const snapshot = { commits: SERIES, position: 2, range: null, message: null } as const;
 
-  assert.equal(neighbour(snapshot, -1, SERIES[1]!.sha)?.abbrev, "1111111");
+  assert.equal(neighbour(snapshot, -1, SERIES[1]!.sha)?.abbrev, "3333333");
   assert.equal(neighbour(snapshot, -1, "unknown-sha")?.abbrev, "2222222");
   assert.equal(neighbour(snapshot, -1, SERIES[0]!.sha), null, "the edge holds while loading too");
 });
@@ -141,7 +141,7 @@ test("selection spans inclusively between explicit endpoints", () => {
     endpoint: 0,
     start: 0,
     end: 2,
-    revisionRange: `${SERIES[0]!.baseSha}..${SERIES[2]!.sha}`,
+    revisionRange: `${SERIES[2]!.baseSha}..${SERIES[0]!.sha}`,
   });
 });
 
@@ -176,7 +176,7 @@ test("a root commit uses its empty-tree base in an inclusive range", () => {
   const range = selectedRange(
     { commits: SERIES, position: 1, range: null, message: null },
     1,
-    0,
+    2,
   );
 
   assert.equal(range?.revisionRange, `${"0".repeat(40)}..${SERIES[1]!.sha}`);

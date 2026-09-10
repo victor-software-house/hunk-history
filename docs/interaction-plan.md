@@ -2,6 +2,9 @@
 
 ## Current operator decisions
 
+- History rows are newest first, matching `git log`. New commits prepend at the top,
+  older pages append at the bottom, the new-commit action opens the first row, and
+  `n` moves down toward older commits while `p` moves up toward newer commits.
 - The operator approved the complete tabbed sidebar for release 0.0.4. Working-state
   letters must match Files status styling: plain colored `S`/`W`, without brackets
   that suggest keyboard shortcuts. Full-width tab backgrounds and the half-cell

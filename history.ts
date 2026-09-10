@@ -134,7 +134,7 @@ export class HistoryController {
       const pinnedScope = resolved.split("\n");
       const changed = fingerprint !== this.fingerprint;
       const existing = seriesSnapshot().commits;
-      const oldTip = existing.at(-1);
+      const oldTip = existing[0];
       const tips = pinnedScope.filter((ref) => !ref.startsWith("^"));
       const exclusions = pinnedScope.filter((ref) => ref.startsWith("^")).join("\n");
       const previousExclusions = this.fingerprint?.split("\n").filter((ref) => ref.startsWith("^")).join("\n");
@@ -150,7 +150,7 @@ export class HistoryController {
           added.push(...page);
           if (page.length < this.options.limit) break;
         }
-        const commits = [...existing, ...added.reverse()];
+        const commits = [...added, ...existing];
         this.loaded = commits.length;
         this.fingerprint = fingerprint;
         this.reconcile(commits);
@@ -166,7 +166,7 @@ export class HistoryController {
       if (!page) throw new Error(`Cannot load history for ${scope}`);
       const hasMore = page.length > count;
       const rows = page.slice(0, count);
-      const commits = skip > 0 ? [...rows.reverse(), ...existing] : rows.reverse();
+      const commits = skip > 0 ? [...existing, ...rows] : rows;
       this.loaded = commits.length;
       this.fingerprint = fingerprint;
       this.reconcile(commits);

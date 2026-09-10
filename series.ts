@@ -90,5 +90,5 @@ export function seriesTitle(repoName: string, snapshot: SeriesSnapshot): string 
 export function rangeTitle(repoName: string, snapshot: SeriesSnapshot): string {
   const range = snapshot.range;
   if (!range) return repoName;
-  return `${repoName} ${snapshot.commits[range.start]?.abbrev}…${snapshot.commits[range.end]?.abbrev}`;
+  return `${repoName} ${snapshot.commits[range.end]?.abbrev}…${snapshot.commits[range.start]?.abbrev}`;
 }

@@ -52,7 +52,7 @@ window's PID, never an arbitrary window on the same checkout.
 ## Live history and scope
 
 History browsing is independent of the loaded diff. By default it follows **HEAD**,
-ordered oldest first. New commits update the list without replacing a selected
+ordered newest first. New commits appear at the top without replacing a selected
 commit or pinned range. The status line shows **N new**; click it to review the
 newest commit. The heading keeps its commit/range position while status changes. A commit outside the current history scope still retains its loaded
 message and diff. Commit subjects lead each row; a trailing short SHA appears only
@@ -62,7 +62,7 @@ History and staged/unstaged counts are checked asynchronously every 1.5 seconds,
 with serialized Git queries. Metadata is fetched in batches and only nearby rows
 are rendered. A fixed **Load older commits** footer stays reachable while scrolling;
 when exhausted, it reads **All N loaded**. The menu action reports exhaustion rather
-than silently doing nothing. `p` also fetches older history at the loaded edge.
+than silently doing nothing. `n` also fetches older history at the loaded edge.
 There is no total commit limit. `limit` is the page size
 (default 50, clamped to 1–500), not a cap on browsable history.
 

@@ -75,7 +75,9 @@ Files ↔ History without changing visibility. Native Files commands and existin
 `hunk-history.files` mappings both toggle the whole replacement pane.
 
 Working states use plain colored `S` (staged) / `W` (working tree) status letters,
-not keyboard shortcuts. The fixed footer offers Load older
+not keyboard shortcuts. History rows are newest first: new commits prepend at the
+top, older pages append at the bottom, `n` moves down toward older commits and `p`
+moves up toward newer commits. The fixed footer offers Load older
 commits while more pages exist; otherwise All N loaded explains why pagination is
 unavailable. Loading comparison/history feedback occupies the existing status area.
 Commit bodies scroll at the user-chosen pane height. Commit changes do not resize

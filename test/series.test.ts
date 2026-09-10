@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { configuredLimit, configuredMessageRows, configuredRange, DEFAULT_LIMIT, gitRunner, readPage, readMessage, readWorktree } from "../series.ts";
+import { configuredLimit, configuredMessageRows, configuredRange, DEFAULT_LIMIT, gitRunner, rangeTitle, readPage, readMessage, readWorktree } from "../series.ts";
+import type { SeriesSnapshot } from "../store.ts";
 import { gitFixture } from "./git-fixture.ts";
 
 test("config validates scope and treats limit as bounded page size", () => {
@@ -48,4 +49,19 @@ test("porcelain counters distinguish mixed, staged, unstaged, untracked and rena
     repo.write("mixed.txt", "only unstaged\n");
     assert.deepEqual(await readWorktree(gitRunner(repo.root)), { staged: 0, unstaged: 1 });
   } finally { repo.close(); }
+});
+
+test("range titles remain oldest to newest with newest-first rows", () => {
+  const commits = [
+    { sha: "3", abbrev: "3333333", subject: "three", baseSha: "2" },
+    { sha: "2", abbrev: "2222222", subject: "two", baseSha: "1" },
+  ];
+  const snapshot: SeriesSnapshot = {
+    commits,
+    position: 0,
+    range: { anchorSha: "3", endpointSha: "2", anchor: 0, endpoint: 1, start: 0, end: 1, revisionRange: "1..3" },
+    message: null,
+  };
+
+  assert.equal(rangeTitle("repo", snapshot), "repo 2222222…3333333");
 });

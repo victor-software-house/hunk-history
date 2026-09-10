@@ -69,7 +69,7 @@ export function CommitLogPane({ actions, width, height, theme, session, onMore }
       return;
     }
     setHistoryGesture(null, { sha, at: now });
-    if (sha === commits.at(-1)?.sha) acknowledgeNewCommits();
+    if (sha === commits[0]?.sha) acknowledgeNewCommits();
     if (range !== null || commits[position ?? -1]?.sha !== sha || pending !== null)
       requestCommit(sha, actions.notify, session);
   };
@@ -161,8 +161,8 @@ export function CommitLogPane({ actions, width, height, theme, session, onMore }
       <text id="history-status" wrapMode="none" selectable={false} fg={anchor || history.error ? theme.text : theme.muted}
         style={{ width, height: 1, flexShrink: 0 }}
         {...handlers("new", () => {
-          if (history.newCommits > 0 && !anchor && commits.at(-1)) {
-            cancel(); acknowledgeNewCommits(); requestCommit(commits.at(-1)!.sha, actions.notify, session);
+          if (history.newCommits > 0 && !anchor && commits[0]) {
+            cancel(); acknowledgeNewCommits(); requestCommit(commits[0].sha, actions.notify, session);
           }
         })}>{clip(status, width)}</text>
       {(["staged", "unstaged"] as const).map((kind) => {
@@ -204,7 +204,7 @@ export function CommitLogPane({ actions, width, height, theme, session, onMore }
         bg={hovered === "older" && history.hasMore ? theme.accentMuted : theme.panelAlt}
         style={{ width, height: 1, flexShrink: 0 }}
         {...handlers("older", () => { if (history.hasMore && !history.loading) onMore?.(); })}>
-        {history.loading ? ` ${spinner} Loading history` : history.hasMore ? " ↑ Load older commits" : ` All ${commits.length} loaded`}
+        {history.loading ? ` ${spinner} Loading history` : history.hasMore ? " ↓ Load older commits" : ` All ${commits.length} loaded`}
       </text>
     </box>
   );
