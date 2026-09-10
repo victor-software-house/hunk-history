@@ -15,8 +15,8 @@ The real Hunk session shows the armed state, then the applied three-commit diff.
 [Full-size animation](https://raw.githubusercontent.com/victor-software-house/hunk-history/main/docs/demo/sidebar.gif) · [Applied range](docs/demo/range.png) · [Recording source](docs/demo/README.md).
 
 Developed and verified against Hunk **0.21.1** and its published extension API **16**,
-with Git on PATH. **0.0.4** includes live history, immediate clicks, preserved
-range gestures, the agent instructions command, and the approved tabbed sidebar.
+with Git on PATH. **0.0.5** shows history newest first while preserving live updates,
+immediate clicks, range gestures, agent instructions, and the approved tabbed sidebar.
 
 A single replacement pane contains Files and History tabs,
 with immediate switching, hover feedback and independent scroll positions. Native
@@ -130,12 +130,12 @@ recomputed automatically when selecting another commit.
 Install the approved release:
 
 ```sh
-hunk extension install victor-software-house/hunk-history@v0.0.4
+hunk extension install victor-software-house/hunk-history@v0.0.5
 ```
 
 For an existing unpinned installation, run `hunk extension update hunk-history`.
 Restart Hunk after updating to load the new extension code; preserve any review
-notes before closing a window. Confirm `hunk extension list` reports 0.0.4 and
+notes before closing a window. Confirm `hunk extension list` reports 0.0.5 and
 `hunk history --help` lists the instruction command.
 
 Test this checkout **without replacing the installed release**, from a Git repository:
@@ -184,4 +184,4 @@ suite, including full-pane remounts, immediate dispatch, request ordering, scrol
 hover and failures. No new dependencies or test framework are needed.
 
 [Trial plan](docs/live-history-plan.md) · [Interaction decisions](docs/interaction-plan.md).
-The live-approved interaction and instruction discovery ship together in 0.0.4.
+The live-approved interaction, instruction discovery, and newest-first history ship in 0.0.5.

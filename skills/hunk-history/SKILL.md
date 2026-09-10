@@ -65,7 +65,7 @@ Do not silently replace a pinned selection with a moving HEAD comparison.
 
 ## Extension behavior
 
-Version 0.0.4 owns a single Files/History pane. Tabs highlight on hover and
+Version 0.0.5 owns a single Files/History pane. Tabs highlight on hover and
 switch immediately without replacing the comparison. Files uses a vendored native
 navigation projection and host selection actions, not a separate file or comment
 store. Each tab retains its scroll position.
@@ -117,6 +117,6 @@ Read [the capability audit](https://github.com/victor-software-house/hunk-histor
 agent integration, note monitoring, or review control. It distinguishes published
 API 16 from unreleased main API 18 and records the exact official source inspected.
 
-Version 0.0.4 includes live history and this instructions command. Earlier 0.0.2
-installations do not. Check `hunk extension list` and command availability; restart
+Version 0.0.5 includes newest-first live history and this instructions command.
+Earlier 0.0.2 installations do not. Check `hunk extension list` and command availability; restart
 an existing Hunk window to load updated extension code, preserving notes first.
