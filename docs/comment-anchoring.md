@@ -63,6 +63,24 @@ with any identity is the path; the anchor is line coordinates inside one documen
   the generation changes on reload and the revision counts review-store mutations. Neither
   is a Git SHA, and the fork source has no such field.
 
+### Extension API snapshot identity
+
+The extension type surface (`hunkdiff/extension`, `ExtensionReviewSnapshot` at
+`dist/npm/extension/extension-api/types.d.ts:1391-1406`) exposes an opaque
+`generation: string` (`:1397`), a store-scoped `stateRevision: number` (`:1399`),
+reviewed files carrying `fileKey` — "stable semantic address within this review"
+(`:1338`) — plus optional `contentIdentity`/`sourceIdentity`, and notes whose `anchor`
+carries `oldRange`, `newRange`, `preferred`, `intersectingHunkIndices`, and
+`ownerHunkIndex` (`:1366-1371`). This extension reads none of it today; it tracks the
+comparison it requested through its own `pendingReview`/`seriesSnapshot` state.
+
+The anchor already rides on the snapshot's `fileKey`, not on a bare path. That does not
+make it durable: in the shipped implementation `fileKey` is
+`digest(sourceLabel, path, previousPath, duplicateIndex)` and `contentIdentity` hashes the
+path as well, so a rename or a comparison change changes both, and `generation` changes on
+reload. Snapshot identity scopes a note inside one review; it cannot replace a durable
+anchor.
+
 ### What survives a path or comparison change
 
 | Item | Survives? |
@@ -73,8 +91,9 @@ with any identity is the path; the anchor is line coordinates inside one documen
 | comparison attribution | no field exists |
 | reachability after the session ends | no; the installed build writes no comment file to disk |
 
-The installed build writes only daemon launch metadata, lock and security files, and
-extension-mediated workspace files. A comment is session-scoped and ephemeral.
+No shipped code path writes review-store notes or comments to disk; the file writes found
+serve daemon launch metadata, lock and security files, extension-mediated workspace files,
+and unrelated caches. A comment is session-scoped and ephemeral.
 
 ## Observed failure, 2026-09-11
 
@@ -92,3 +111,4 @@ Against hunk-history 0.0.5 and installed `hunkdiff` 0.21.1:
   whose body quotes the original text.
 
 This is observation, not a reproduced test. The record-shape section is code-verified.
+
