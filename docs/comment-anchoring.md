@@ -66,7 +66,7 @@ with any identity is the path; the anchor is line coordinates inside one documen
 ### Extension API snapshot identity
 
 The extension type surface (`hunkdiff/extension`, `ExtensionReviewSnapshot` at
-`dist/npm/extension/extension-api/types.d.ts:1391-1406`) exposes an opaque
+`dist/npm/extension/extension-api/types.d.ts:1394-1407`) exposes an opaque
 `generation: string` (`:1397`), a store-scoped `stateRevision: number` (`:1399`),
 reviewed files carrying `fileKey` — "stable semantic address within this review"
 (`:1338`) — plus optional `contentIdentity`/`sourceIdentity`, and notes whose `anchor`
