@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { configuredLimit, configuredMessageRows, configuredRange, DEFAULT_LIMIT, gitRunner, rangeTitle, readPage, readMessage, readWorktree } from "../series.ts";
+import { configuredLimit, configuredMessageRows, configuredRange, DEFAULT_LIMIT, gitRunner, matchesRevisionRange, rangeTitle, readPage, readMessage, readWorktree } from "../series.ts";
 import type { SeriesSnapshot } from "../store.ts";
 import { gitFixture } from "./git-fixture.ts";
 
@@ -64,4 +64,25 @@ test("range titles remain oldest to newest with newest-first rows", () => {
   };
 
   assert.equal(rangeTitle("repo", snapshot), "repo 2222222…3333333");
+});
+
+test("the host's abbreviated range title still names the range we asked for", () => {
+  // The exact pair observed when a selection stopped painting: the request
+  // carries full object ids, the host titles the review with abbreviated ones.
+  const requested =
+    "34e26a1f0b8e4c6d9a2f7b3c5d8e1a4f6b9c2d70..1eac075f72137c1f20188ef368980f767eefa101";
+
+  assert.equal(matchesRevisionRange("34e26a1..1eac075", requested), true);
+  assert.equal(matchesRevisionRange(requested, requested), true);
+});
+
+test("a range title that names other commits is not ours", () => {
+  const requested =
+    "34e26a1f0b8e4c6d9a2f7b3c5d8e1a4f6b9c2d70..1eac075f72137c1f20188ef368980f767eefa101";
+
+  assert.equal(matchesRevisionRange("34e26a1..9999999", requested), false);
+  assert.equal(matchesRevisionRange("9999999..1eac075", requested), false);
+  assert.equal(matchesRevisionRange("34e26a1", requested), false);
+  assert.equal(matchesRevisionRange("..1eac075", requested), false);
+  assert.equal(matchesRevisionRange("34e26a1..1eac075", "not-a-range"), false);
 });

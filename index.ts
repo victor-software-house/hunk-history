@@ -1,7 +1,7 @@
 import type { ExtensionCommandContext, ExtensionPaneControls, HunkExtensionAPI } from "hunkdiff/extension";
 import { MessagePane } from "./pane.tsx";
 import { BrowserPane } from "./browser-pane.tsx";
-import { configuredLimit, configuredMessageRows, configuredRange, gitRunner, readMessage, readPage, rangeTitle, seriesTitle } from "./series.ts";
+import { configuredLimit, configuredMessageRows, configuredRange, gitRunner, matchesRevisionRange, readMessage, readPage, rangeTitle, seriesTitle } from "./series.ts";
 import { loadingReview, pendingCommit, requestCommit, requestWorking, requestComparison } from "./session.ts";
 import { HistoryController, historySnapshot, cancelHistoryGesture } from "./history.ts";
 import {
@@ -34,7 +34,9 @@ export default function registerCommitLog(hunk: HunkExtensionAPI): void {
       const title = changeset.title;
       const request = loadingReview();
       const own = request && (request.kind === "commit" ? title === `${repo} show ${request.value}`
-        : request.kind === "range" ? title === `${repo} ${request.value}`
+        : request.kind === "range"
+          ? title.startsWith(`${repo} `) &&
+            matchesRevisionRange(title.slice(repo.length + 1), request.value)
         : title === `${repo} ${request.value === "staged" ? "staged changes" : request.value === "all" ? "HEAD" : "working tree"}`);
       const old = seriesSnapshot();
       if (!own && old.review !== title) cancelHistoryGesture();

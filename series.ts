@@ -92,3 +92,24 @@ export function rangeTitle(repoName: string, snapshot: SeriesSnapshot): string {
   if (!range) return repoName;
   return `${repoName} ${snapshot.commits[range.end]?.abbrev}…${snapshot.commits[range.start]?.abbrev}`;
 }
+
+/**
+ * Recognize the review Hunk built for a range this extension asked for.
+ *
+ * A request carries full object ids, because that is what `hunk diff` must be
+ * given, but the host titles the resulting review with abbreviated ones. Exact
+ * string equality therefore never matches a range, and the selection that the
+ * reviewer just made is dropped on arrival. Compare endpoint by endpoint and
+ * let the host's abbreviation prefix its own full id, at whatever length the
+ * repository currently abbreviates to.
+ */
+export function matchesRevisionRange(titleRange: string, requested: string): boolean {
+  const shown = titleRange.split("..");
+  const asked = requested.split("..");
+  if (shown.length !== 2 || asked.length !== 2) return false;
+
+  return shown.every((part, index) => {
+    const full = asked[index] ?? "";
+    return part !== "" && full !== "" && full.startsWith(part);
+  });
+}
