@@ -56,11 +56,10 @@ export function CommitLogPane({ actions, width, height, theme, session, onMore }
       const start = commits.findIndex((commit) => commit.sha === anchor);
       const end = commits.findIndex((commit) => commit.sha === sha);
       cancel();
-      if (start === end) requestCommit(sha, actions.notify, session);
-      else {
-        const selection = selectedRange(snapshot, start, end);
-        if (selection) requestRange(selection, actions.notify, session);
-      }
+      // Closing a gesture on its own anchor is an interval of one, not a
+      // different kind of review.
+      const selection = selectedRange(snapshot, start, end);
+      if (selection) requestRange(selection, actions.notify, session);
       return;
     }
     const now = Date.now();

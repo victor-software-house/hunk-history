@@ -141,13 +141,14 @@ export function seriesHeading(
   width: number,
   range?: { start: number; end: number } | null,
 ): string {
-  const place =
-    range !== null && range !== undefined
-      ? `${range.start + 1}–${range.end + 1}/${total}`
-      : position === null
-        ? `${total}`
-        : `${position + 1}/${total}`;
-  const label = range ? "Applied" : "Commits";
+  // An interval of one is a single commit, and reads as one rather than "5–5".
+  const span = range !== null && range !== undefined && range.start !== range.end;
+  const place = span
+    ? `${range.start + 1}–${range.end + 1}/${total}`
+    : position === null
+      ? `${total}`
+      : `${position + 1}/${total}`;
+  const label = span ? "Applied" : "Commits";
   return clip(` ${label} ${place}`, width);
 }
 

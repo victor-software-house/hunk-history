@@ -143,7 +143,14 @@ export function neighbour(
   return snapshot.commits[base + delta] ?? null;
 }
 
-/** Build one inclusive range from explicitly chosen endpoint rows. */
+/**
+ * Build one inclusive contiguous interval from explicitly chosen endpoint rows.
+ *
+ * A selection is always an interval, and one commit is the interval of length
+ * one: `parent..commit`, which is what reviewing a single commit already means.
+ * The endpoints may therefore be the same row, and the revision range below
+ * needs no special case to express it.
+ */
 export function selectedRange(
   snapshot: SeriesSnapshot,
   anchor: number,
@@ -153,8 +160,7 @@ export function selectedRange(
     anchor < 0 ||
     anchor >= snapshot.commits.length ||
     endpoint < 0 ||
-    endpoint >= snapshot.commits.length ||
-    anchor === endpoint
+    endpoint >= snapshot.commits.length
   ) {
     return null;
   }

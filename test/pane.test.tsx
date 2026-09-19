@@ -112,8 +112,10 @@ for (const [start, end] of [[1, 4], [4, 1], [2, 2]]) {
     assert.match(ui.captureCharFrame(), /End · Esc/);
     assert.deepEqual(requested, [["show", commits[start!]!.sha]]);
     await ui.click(end!);
-    assert.deepEqual(requested.at(-1), start === end ? ["show", commits[end!]!.sha]
-      : ["diff", selectedRange(seriesSnapshot(), start!, end!)!.revisionRange]);
+    // Closing the gesture on its own anchor is an interval of one, which is
+    // still a diff against the parent rather than a different kind of review.
+    assert.deepEqual(requested.at(-1),
+      ["diff", selectedRange(seriesSnapshot(), start!, end!)!.revisionRange]);
     assert.doesNotMatch(ui.captureCharFrame(), /End · Esc/);
   });
 }

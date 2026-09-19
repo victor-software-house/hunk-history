@@ -253,3 +253,21 @@ test("every rung is a distinct pane, and none is the collapsed one", () => {
   assert.equal(new Set(ids).size, ids.length);
   assert.ok(!ids.includes(COLLAPSED_MESSAGE_PANE));
 });
+
+test("one commit is the interval of length one, diffed against its parent", () => {
+  const snapshot = { commits: SERIES, position: 1, range: null, message: null } as const;
+  const range = selectedRange(snapshot, 1, 1);
+
+  assert.deepEqual(range, {
+    anchorSha: SERIES[1]!.sha,
+    endpointSha: SERIES[1]!.sha,
+    anchor: 1,
+    endpoint: 1,
+    start: 1,
+    end: 1,
+    revisionRange: `${SERIES[1]!.baseSha}..${SERIES[1]!.sha}`,
+  });
+  assert.equal(isSelectedIndex({ ...snapshot, range }, 1), true);
+  assert.equal(isSelectedIndex({ ...snapshot, range }, 0), false);
+  assert.equal(isSelectedIndex({ ...snapshot, range }, 2), false);
+});
