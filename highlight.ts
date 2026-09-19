@@ -1,26 +1,10 @@
-import { clip, wrap } from "./row.ts";
+import type { Row, Segment, Tone } from "./row.ts";
+import { clipRow, conventionalSegments, wrap } from "./row.ts";
 import type { CommitMessage, SeriesCommit } from "./store.ts";
 
-/**
- * A theme role, not a colour.
- *
- * The pane resolves these against the active theme, so a message keeps reading
- * the same way when the reviewer switches themes, and nothing here has to know
- * what colour anything is.
- */
-export type Tone = "text" | "muted" | "accent" | "accentMuted";
+export type { Row, Segment, Tone };
+export { clipRow };
 
-/** One run of characters that share a tone. */
-export interface Segment {
-  text: string;
-  tone: Tone;
-}
-
-/** One painted row of the message pane. */
-export type Row = Segment[];
-
-/** `type(scope):` and `type!:` as Conventional Commits writes them. */
-const CONVENTIONAL_PREFIX = /^([a-z]+(?:\([^)]*\))?!?:)(\s.*)$/;
 /** A trailer line: `Signed-off-by: …`, `Co-Authored-By: …`, `Fixes: …`. */
 const TRAILER = /^[A-Z][A-Za-z-]*:\s\S/;
 /** A list item, whose marker carries the structure and the rest the content. */
@@ -69,17 +53,9 @@ function withCodeSpans(text: string, tone: Tone): Segment[] {
 
 /** The commit and what it does: the sha recedes, the type leads, the summary reads. */
 export function subjectRow(commit: SeriesCommit): Row {
-  const conventional = CONVENTIONAL_PREFIX.exec(commit.subject);
-  const heading: Row = [{ text: ` ${commit.abbrev} `, tone: "muted" }];
-
-  if (conventional === null) {
-    return [...heading, { text: commit.subject, tone: "text" }];
-  }
-
   return [
-    ...heading,
-    { text: conventional[1] ?? "", tone: "accent" },
-    { text: conventional[2] ?? "", tone: "text" },
+    { text: ` ${commit.abbrev} `, tone: "revision" },
+    ...conventionalSegments(commit.subject),
   ];
 }
 
@@ -106,7 +82,11 @@ export function formatTimestamp(timestamp: string): string {
 
 /** Who wrote it and when, which is context rather than content. */
 export function metaRow(message: CommitMessage): Row {
-  return [{ text: ` ${message.author}  ${formatTimestamp(message.timestamp)}`, tone: "muted" }];
+  return [
+    { text: ` ${message.author}`, tone: "author" },
+    { text: "  ", tone: "separator" },
+    { text: formatTimestamp(message.timestamp), tone: "time" },
+  ];
 }
 
 /**
@@ -136,23 +116,6 @@ export function bodyRow(line: string): Row {
   }
 
   return withCodeSpans(line, "text");
-}
-
-/** Trim a row to an exact column count, dropping whole segments past the edge. */
-export function clipRow(row: Row, width: number): Row {
-  const clipped: Row = [];
-  let used = 0;
-
-  for (const segment of row) {
-    if (used >= width) {
-      break;
-    }
-    const text = clip(segment.text, width - used);
-    clipped.push({ text, tone: segment.tone });
-    used += text.length;
-  }
-
-  return clipped;
 }
 
 /** Lay out the complete message for a fixed-width, scrollable presentation. */

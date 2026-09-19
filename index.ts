@@ -18,6 +18,9 @@ import { createElement } from "react";
 import { createSidebar, SIDEBAR_PANE } from "./sidebar.ts";
 import { historyInstructions } from "./cli.ts";
 
+/** Hunk's own bundled multi-commit summary, addressed by its qualified pane key. */
+const BUNDLED_COMPARISON_REVIEW_INFO_PANE = "hunk:comparison-review-info";
+
 export default function registerCommitLog(hunk: HunkExtensionAPI): void {
   const sidebar = createSidebar();
   hunk.registerCliCommand({ name: "history", summary: "Read history extension instructions", usage: "<instructions|help>" }, historyInstructions);
@@ -214,6 +217,10 @@ export default function registerCommitLog(hunk: HunkExtensionAPI): void {
   // Opening the pane reveals the area, which `defaultOpen` alone does not do,
   // so the commit list is there at the width a terminal usually has.
   hunk.on("startup", (_event, ctx) => {
+    // Hunk 0.22.0 bundles its own comparison commit list above the diff. This
+    // pane is that list, with selection and range review attached, so leaving
+    // both open spends rows on the same commits twice.
+    ctx.panes.close(BUNDLED_COMPARISON_REVIEW_INFO_PANE);
     sidebar.show(ctx.panes, historySnapshot().root === null ? "files" : "history");
     history.start();
   });

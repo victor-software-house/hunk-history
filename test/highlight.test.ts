@@ -34,20 +34,37 @@ function text(row: { text: string; tone: string }[]): string {
 test("the sha recedes and the conventional type leads the subject", () => {
   const row = subjectRow(COMMIT);
 
-  assert.deepEqual(tones(row), ["muted", "accent", "text"]);
-  assert.equal(row[1]?.text, "chore(supply-chain-node):");
+  assert.deepEqual(tones(row), ["revision", "accent", "muted", "separator", "text"]);
+  assert.deepEqual(
+    row.slice(1, 4).map((segment) => segment.text),
+    ["chore", "(supply-chain-node)", ":"],
+  );
   assert.equal(text(row), " 8610b105 chore(supply-chain-node): regenerate the open-api spec");
+});
+
+test("the kinds the diff already colours keep their own tone, and a break shows", () => {
+  const tone = (subject: string) => tones(subjectRow({ ...COMMIT, subject }))[1];
+
+  assert.equal(tone("feat: add the endpoint"), "added");
+  assert.equal(tone("fix: correct the offset"), "modified");
+  assert.equal(tone("docs: explain the flag"), "accent");
+  assert.deepEqual(
+    tones(subjectRow({ ...COMMIT, subject: "feat(api)!: drop the legacy route" })),
+    ["revision", "added", "muted", "removed", "separator", "text"],
+  );
 });
 
 test("a subject with no conventional prefix is all one run", () => {
   const row = subjectRow({ ...COMMIT, subject: "Merge branch 'next' into topic" });
 
-  assert.deepEqual(tones(row), ["muted", "text"]);
+  assert.deepEqual(tones(row), ["revision", "text"]);
 });
 
 test("who wrote it is context, not content", () => {
   assert.deepEqual(metaRow(MESSAGE), [
-    { text: " Ada Lovelace  Aug 1, 2026 at 9:04:05 PM UTC+03:00", tone: "muted" },
+    { text: " Ada Lovelace", tone: "author" },
+    { text: "  ", tone: "separator" },
+    { text: "Aug 1, 2026 at 9:04:05 PM UTC+03:00", tone: "time" },
   ]);
 });
 

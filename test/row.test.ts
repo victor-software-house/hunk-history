@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { clip, commitRow, seriesHeading, wrap } from "../row.ts";
+import { clip, commitRow, rowText, seriesHeading, wrap } from "../row.ts";
 import type { SeriesCommit } from "../store.ts";
 
 const COMMIT: SeriesCommit = {
@@ -24,32 +24,73 @@ test("a line that overruns its column is clipped, never wrapped", () => {
 
 test("the reviewed commit is the marked row", () => {
   assert.equal(
-    commitRow(COMMIT, 60, { active: true, selected: true }),
+    rowText(commitRow(COMMIT, 60, { active: true, selected: true })),
     " ▸ regenerate the open-api spec · 8610b105",
   );
   assert.equal(
-    commitRow(COMMIT, 60, { active: false, selected: true }),
+    rowText(commitRow(COMMIT, 60, { active: false, selected: true })),
     " │ regenerate the open-api spec · 8610b105",
   );
   assert.equal(
-    commitRow(COMMIT, 60, { active: false, selected: false }),
+    rowText(commitRow(COMMIT, 60, { active: false, selected: false })),
     "   regenerate the open-api spec · 8610b105",
   );
 });
 
+test("the marker leads in the accent only while its commit is the reviewed one", () => {
+  const marker = (active: boolean) => commitRow(COMMIT, 60, { active, selected: true })[0]?.tone;
+
+  assert.equal(marker(true), "accent");
+  assert.equal(marker(false), "muted");
+});
+
+test("the sha rides at the end in the revision tone, behind its own separator", () => {
+  const row = commitRow(COMMIT, 60, { active: true, selected: true });
+
+  assert.deepEqual(row.slice(-2), [
+    { text: " · ", tone: "separator" },
+    { text: "8610b105", tone: "revision" },
+  ]);
+});
+
+test("a conventional subject is painted in the history row, not only the message", () => {
+  const row = commitRow(
+    { ...COMMIT, subject: "feat(api)!: drop the legacy route" },
+    60,
+    { active: false, selected: false },
+  );
+
+  assert.deepEqual(row.map((segment) => segment.tone), [
+    "muted",
+    "added",
+    "muted",
+    "removed",
+    "separator",
+    "text",
+    "separator",
+    "revision",
+  ]);
+});
+
 test("subjects take priority over hashes in narrow history rows", () => {
   const state = { active: true, selected: true };
-  assert.equal(commitRow(COMMIT, 34, state), " ▸ regenerate the open-api spec");
-  assert.equal(commitRow(COMMIT, 22, state), " ▸ regenerate the ope…");
+  assert.equal(rowText(commitRow(COMMIT, 34, state)), " ▸ regenerate the open-api spec");
+  assert.equal(rowText(commitRow(COMMIT, 22, state)), " ▸ regenerate the ope…");
 });
 
 test("a commit row never exceeds the pane width", () => {
   const state = { active: true, selected: true };
   for (const width of [1, 4, 12, 24, 39, 40]) {
-    assert.ok(
-      commitRow(COMMIT, width, state).length <= width,
-      `width ${width} produced ${commitRow(COMMIT, width, state).length} columns`,
-    );
+    const painted = rowText(commitRow(COMMIT, width, state));
+    assert.ok(painted.length <= width, `width ${width} produced ${painted.length} columns`);
+  }
+});
+
+test("a conventional row is clipped across its segments, never past the pane", () => {
+  const commit = { ...COMMIT, subject: "refactor(provider-kit): lower the strict tool schema" };
+  for (const width of [1, 3, 8, 15, 30, 48]) {
+    const painted = rowText(commitRow(commit, width, { active: true, selected: false }));
+    assert.ok(painted.length <= width, `width ${width} produced ${painted.length} columns`);
   }
 });
 

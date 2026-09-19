@@ -190,9 +190,12 @@ export function CommitLogPane({ actions, width, height, theme, session, onMore }
           return <box key={commit.sha} id={`commit-log-row-${index}`}
             style={{ height: 1, flexShrink: 0, width: "100%", backgroundColor: background }}
             {...handlers(commit.sha, () => choose(commit.sha))}>
-            <text wrapMode="none" selectable={false}
-              fg={hovered === commit.sha && selected ? theme.accent : theme.text} bg={background}>
-              {commitRow(commit, width, { active: index === painted.position, selected })}
+            <text wrapMode="none" selectable={false} bg={background}>
+              {commitRow(commit, width, { active: index === painted.position, selected })
+                .map((segment, part) => <span key={part} bg={background}
+                  fg={hovered === commit.sha && selected ? theme.accent : toneColor(theme, segment.tone)}>
+                  {segment.text}
+                </span>)}
             </text>
           </box>;
         })}
@@ -216,7 +219,13 @@ export function CommitLogPane({ actions, width, height, theme, session, onMore }
  * Hunk builds a revision review with `git show --format=`, so the message is
  * the one thing about the commit that the review itself never shows.
  */
-/** Tones name theme roles, so a theme switch repaints without touching this. */
+/**
+ * Tones name theme roles, so a theme switch repaints without touching this.
+ *
+ * The history roles fall back exactly the way Hunk's own review-info pane
+ * falls back, so a theme that declines to name them still paints both commit
+ * lists the same.
+ */
 function toneColor(theme: ExtensionPaneProps["theme"], tone: Tone): string {
   switch (tone) {
     case "accent":
@@ -225,6 +234,20 @@ function toneColor(theme: ExtensionPaneProps["theme"], tone: Tone): string {
       return theme.accentMuted;
     case "muted":
       return theme.muted;
+    case "revision":
+      return theme.fileRenamed;
+    case "separator":
+      return theme.historySeparator ?? theme.muted;
+    case "author":
+      return theme.historyAuthor ?? theme.badgeAdded;
+    case "time":
+      return theme.historyRelativeTime ?? theme.muted;
+    case "added":
+      return theme.badgeAdded;
+    case "modified":
+      return theme.fileModified;
+    case "removed":
+      return theme.badgeRemoved;
     default:
       return theme.text;
   }
