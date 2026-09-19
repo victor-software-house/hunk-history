@@ -76,6 +76,9 @@ export function CommitLogPane({ actions, width, height, theme, session, onMore }
 
   const renderer = useRenderer();
   useEffect(() => {
+    if (typeof renderer.setMaxListeners === "function") renderer.setMaxListeners(20);
+  }, [renderer]);
+  useEffect(() => {
     const view = scroll.current;
     if (!view) return;
     let restore = historySnapshot().scrollTop;

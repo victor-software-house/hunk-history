@@ -22,14 +22,14 @@ const commits = Array.from({ length: 100 }, (_, index) => ({
 const warnings: string[] = [];
 const props: ExtensionPaneProps = {
   width: 34, height: 12, placement: "left", files: [], selectedFileId: null,
-  selectedHunkIndex: null, currentLine: null,
+  selectedHunkIndex: null, currentLine: null, review: null,
   keybindings: { matches: () => false, getKeys: () => [] },
-  actions: { notify: (message) => warnings.push(message), selectFile: () => {}, selectHunk: () => {}, revealLine: () => {} },
+  actions: { notify: (message) => warnings.push(message), selectFile: () => {}, selectHunk: () => {}, revealLine: () => {}, copyText: () => true },
   theme: {
     appearance: "dark", background: "#101010", panel: "#101010", panelAlt: "#202020", border: "#606060",
     accent: "#00ffff", accentMuted: "#004444", text: "#ffffff", muted: "#aaaaaa", selectedHunk: "#303030",
     badgeAdded: "#00ff00", badgeRemoved: "#ff0000", badgeNeutral: "#aaaaaa", fileNew: "#00ff00",
-    fileDeleted: "#ff0000", fileRenamed: "#ffff00", fileModified: "#ffff00", fileUntracked: "#aaaaaa", noteBorder: "#606060",
+    fileDeleted: "#ff0000", fileRenamed: "#ffff00", fileModified: "#ffff00", fileUntracked: "#aaaaaa", noteBorder: "#606060", copyAction: "#00ffff",
   },
 };
 
